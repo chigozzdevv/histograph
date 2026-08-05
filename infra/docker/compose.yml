@@ -1,34 +1,202 @@
 name: histograph
 
+x-histograph-environment: &histograph-environment
+  HISTOGRAPH_ENVIRONMENT: local
+  HISTOGRAPH_DATABASE_URL: postgresql+asyncpg://histograph:histograph@postgres:5432/${HISTOGRAPH_DATABASE_NAME:-histograph}
+  HISTOGRAPH_ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+  HISTOGRAPH_ENCRYPTION_KEYS: ${HISTOGRAPH_ENCRYPTION_KEYS:?HISTOGRAPH_ENCRYPTION_KEYS is required}
+  HISTOGRAPH_TOKEN_PEPPER: ${HISTOGRAPH_TOKEN_PEPPER:?HISTOGRAPH_TOKEN_PEPPER is required}
+  HISTOGRAPH_BOOTSTRAP_TOKEN: ${HISTOGRAPH_BOOTSTRAP_TOKEN:?HISTOGRAPH_BOOTSTRAP_TOKEN is required}
+  HISTOGRAPH_TEMPORAL_ADDRESS: temporal:7233
+  HISTOGRAPH_TEMPORAL_NAMESPACE: default
+  HISTOGRAPH_TEMPORAL_TASK_QUEUE: histograph-runs
+  HISTOGRAPH_S3_ENDPOINT_URL: http://minio:9000
+  HISTOGRAPH_S3_BUCKET: histograph-evidence
+  HISTOGRAPH_S3_REGION: us-east-1
+  HISTOGRAPH_S3_ACCESS_KEY_ID: ${HISTOGRAPH_S3_ACCESS_KEY_ID:?HISTOGRAPH_S3_ACCESS_KEY_ID is required}
+  HISTOGRAPH_S3_SECRET_ACCESS_KEY: ${HISTOGRAPH_S3_SECRET_ACCESS_KEY:?HISTOGRAPH_S3_SECRET_ACCESS_KEY is required}
+  HISTOGRAPH_GITHUB_APP_ID: ${HISTOGRAPH_GITHUB_APP_ID:-}
+  HISTOGRAPH_GITHUB_PRIVATE_KEY: ${HISTOGRAPH_GITHUB_PRIVATE_KEY:-}
+  HISTOGRAPH_GITHUB_WEBHOOK_SECRET: ${HISTOGRAPH_GITHUB_WEBHOOK_SECRET:-}
+  HISTOGRAPH_GITHUB_API_URL: ${HISTOGRAPH_GITHUB_API_URL:-https://api.github.com}
+  HISTOGRAPH_GITHUB_API_VERSION: ${HISTOGRAPH_GITHUB_API_VERSION:-2026-03-10}
+  HISTOGRAPH_PUBLIC_APP_URL: ${HISTOGRAPH_PUBLIC_APP_URL:-http://localhost:3000}
+  HISTOGRAPH_OIDC_ISSUER: ${HISTOGRAPH_OIDC_ISSUER:-}
+  HISTOGRAPH_OIDC_AUDIENCE: ${HISTOGRAPH_OIDC_AUDIENCE:-}
+
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: histograph
+      POSTGRES_DB: ${HISTOGRAPH_DATABASE_NAME:-histograph}
       POSTGRES_USER: histograph
       POSTGRES_PASSWORD: histograph
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U histograph"]
+      test: ["CMD-SHELL", "pg_isready -U histograph -d ${HISTOGRAPH_DATABASE_NAME:-histograph}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
     ports:
-      - "5432:5432"
+      - "${HISTOGRAPH_POSTGRES_PORT:-5432}:5432"
     volumes:
       - histograph-postgres:/var/lib/postgresql/data
+
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - temporal-postgres:/var/lib/postgresql/data
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:1.31.0
+    environment:
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-postgres
+      SQL_PASSWORD: temporal
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh"]
+    command: /scripts/setup-postgres.sh
+    restart: on-failure:6
+    volumes:
+      - ./temporal/scripts:/scripts:ro
+
+  temporal:
+    image: temporalio/server:1.31.0
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-postgres
+      BIND_ON_IP: 0.0.0.0
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/local-sql.yaml
+    depends_on:
+      temporal-admin-tools:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "7233"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    ports:
+      - "${HISTOGRAPH_TEMPORAL_PORT:-7233}:7233"
+    volumes:
+      - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+
+  temporal-create-namespace:
+    image: temporalio/admin-tools:1.31.0
+    environment:
+      DEFAULT_NAMESPACE: default
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      temporal:
+        condition: service_healthy
+    entrypoint: ["/bin/sh"]
+    command: /scripts/create-namespace.sh
+    restart: on-failure:5
+    volumes:
+      - ./temporal/scripts:/scripts:ro
+
+  temporal-ui:
+    image: temporalio/ui:2.49.1
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      temporal-create-namespace:
+        condition: service_completed_successfully
+    ports:
+      - "${HISTOGRAPH_TEMPORAL_UI_PORT:-8080}:8080"
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${HISTOGRAPH_S3_ACCESS_KEY_ID:?HISTOGRAPH_S3_ACCESS_KEY_ID is required}
+      MINIO_ROOT_PASSWORD: ${HISTOGRAPH_S3_SECRET_ACCESS_KEY:?HISTOGRAPH_S3_SECRET_ACCESS_KEY is required}
+    ports:
+      - "${HISTOGRAPH_S3_PORT:-9000}:9000"
+      - "${HISTOGRAPH_S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - histograph-evidence:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment: *histograph-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   api:
     build:
       context: ../..
       dockerfile: infra/docker/api.Dockerfile
-    environment:
-      HISTOGRAPH_DATABASE_URL: postgresql+asyncpg://histograph:histograph@postgres:5432/histograph
-      HISTOGRAPH_ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+    environment: *histograph-environment
     depends_on:
-      postgres:
+      migrate:
+        condition: service_completed_successfully
+      temporal-create-namespace:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${HISTOGRAPH_API_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/worker.Dockerfile
+    environment: *histograph-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      temporal-create-namespace:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ../..
+      dockerfile: infra/docker/client.Dockerfile
+    environment:
+      HISTOGRAPH_API_URL: http://api:8000
+      HISTOGRAPH_API_TOKEN: ${HISTOGRAPH_BOOTSTRAP_TOKEN:?HISTOGRAPH_BOOTSTRAP_TOKEN is required}
+      HISTOGRAPH_GITHUB_INSTALL_URL: ${HISTOGRAPH_GITHUB_INSTALL_URL:-}
+    depends_on:
+      api:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "${HISTOGRAPH_CLIENT_PORT:-3000}:3000"
+    restart: unless-stopped
 
 volumes:
   histograph-postgres:
+  temporal-postgres:
+  histograph-evidence:
