@@ -113,6 +113,35 @@ class DataHubMcpClient:
                 entities = tuple(item for item in entity_result if isinstance(item, dict))
         return DataHubContextSnapshot(query=query, asset_urns=urns, entities=entities)
 
+    async def get_downstream_lineage(
+        self,
+        urn: str,
+        *,
+        max_hops: int = 3,
+        max_results: int = 100,
+    ) -> tuple[dict[str, Any], ...]:
+        results: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            response = await self.call_tool(
+                "get_lineage",
+                {
+                    "urn": urn,
+                    "upstream": False,
+                    "max_hops": max_hops,
+                    "max_results": max_results,
+                    "offset": offset,
+                },
+            )
+            direction = response.get("downstreams", {}) if isinstance(response, dict) else {}
+            page = direction.get("searchResults", []) if isinstance(direction, dict) else []
+            results.extend(item for item in page if isinstance(item, dict))
+            returned = int(direction.get("returned", len(page)))
+            if not direction.get("hasMore") or returned == 0:
+                break
+            offset += returned
+        return tuple(results)
+
     @staticmethod
     def _content_text(content: list[types.ContentBlock]) -> str:
         return "\n".join(block.text for block in content if isinstance(block, types.TextContent))

@@ -5,14 +5,20 @@ description = "Continuous assurance for DataHub-powered agents"
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "aiosqlite>=0.21,<1",
+    "alembic>=1.16,<2",
     "asyncpg>=0.30,<1",
+    "boto3>=1.40,<2",
+    "cryptography>=46,<51",
+    "croniter>=6,<7",
     "fastapi>=0.116,<1",
     "httpx>=0.28,<1",
     "mcp>=1.24,<2",
     "pydantic>=2.11,<3",
     "pydantic-settings>=2.10,<3",
+    "pyjwt[crypto]>=2.10,<3",
     "sqlalchemy[asyncio]>=2.0,<3",
     "sqlglot>=27,<28",
+    "temporalio>=1.9,<2",
     "uvicorn[standard]>=0.35,<1",
 ]
 
@@ -33,7 +39,12 @@ packages = [
     "packages/datahub/src/histograph_datahub",
     "packages/agents/src/histograph_agents",
     "packages/evaluation/src/histograph_evaluation",
+    "packages/github/src/histograph_github",
+    "packages/security/src/histograph_security",
+    "packages/storage/src/histograph_storage",
+    "packages/workflows/src/histograph_workflows",
     "server/runner/src/histograph_runner",
+    "server/worker/src/histograph_worker",
     "server/api/src/histograph_api",
 ]
 
@@ -45,7 +56,10 @@ pythonpath = [
     "packages/datahub/src",
     "packages/agents/src",
     "packages/evaluation/src",
+    "packages/github/src",
+    "packages/storage/src",
     "server/runner/src",
+    "server/worker/src",
     "server/api/src",
 ]
 
