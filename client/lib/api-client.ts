@@ -1,33 +1,108 @@
-import type { Run, RunRequest } from "@/lib/types";
+import "server-only";
 
-const apiUrl = process.env.NEXT_PUBLIC_HISTOGRAPH_API_URL ?? "http://localhost:8000";
+import type {
+  AgentTarget,
+  AuditEvent,
+  Baseline,
+  DataHubConnection,
+  GitHubInstallation,
+  Incident,
+  Organization,
+  Project,
+  ProtectedQuestion,
+  RepositoryConnection,
+  Run,
+  Schedule,
+  TestSuite,
+  TestExecution,
+} from "@/lib/types";
 
-export async function getRuns(): Promise<Run[]> {
-  const response = await fetch(`${apiUrl}/v1/runs`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Unable to load runs: ${response.status}`);
+const apiUrl = process.env.HISTOGRAPH_API_URL ?? "http://localhost:8000";
+
+async function apiRequest<T>(path: string): Promise<T> {
+  const token = process.env.HISTOGRAPH_API_TOKEN;
+  if (!token) {
+    throw new Error("HISTOGRAPH_API_TOKEN is not configured");
   }
-  const payload = (await response.json()) as { items: Run[] };
+  const response = await fetch(`${apiUrl}/v1${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Histograph API request failed with ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+export function getOrganizations(): Promise<Organization[]> {
+  return apiRequest("/organizations");
+}
+
+export function getProjects(organizationId: string): Promise<Project[]> {
+  return apiRequest(`/projects?organization_id=${encodeURIComponent(organizationId)}`);
+}
+
+export function getProject(projectId: string): Promise<Project> {
+  return apiRequest(`/projects/${projectId}`);
+}
+
+export function getDataHubConnections(projectId: string): Promise<DataHubConnection[]> {
+  return apiRequest(`/projects/${projectId}/datahub-connections`);
+}
+
+export function getAgentTargets(projectId: string): Promise<AgentTarget[]> {
+  return apiRequest(`/projects/${projectId}/agent-targets`);
+}
+
+export function getTestSuites(projectId: string): Promise<TestSuite[]> {
+  return apiRequest(`/projects/${projectId}/test-suites`);
+}
+
+export function getSchedules(projectId: string): Promise<Schedule[]> {
+  return apiRequest(`/projects/${projectId}/schedules`);
+}
+
+export function getGitHubInstallations(organizationId: string): Promise<GitHubInstallation[]> {
+  return apiRequest(`/organizations/${organizationId}/github-installations`);
+}
+
+export function getRepositories(projectId: string): Promise<RepositoryConnection[]> {
+  return apiRequest(`/projects/${projectId}/repositories`);
+}
+
+export function getProtectedQuestions(projectId: string): Promise<ProtectedQuestion[]> {
+  return apiRequest(`/projects/${projectId}/protected-questions`);
+}
+
+export async function getBaselines(
+  projectId: string,
+  questions: ProtectedQuestion[],
+): Promise<Baseline[]> {
+  const groups = await Promise.all(
+    questions.map((question) =>
+      apiRequest<Baseline[]>(`/projects/${projectId}/protected-questions/${question.id}/baselines`),
+    ),
+  );
+  return groups.flat();
+}
+
+export function getIncidents(projectId: string): Promise<Incident[]> {
+  return apiRequest(`/projects/${projectId}/incidents`);
+}
+
+export function getAuditEvents(projectId: string): Promise<AuditEvent[]> {
+  return apiRequest(`/projects/${projectId}/audit-events?limit=25`);
+}
+
+export async function getRuns(projectId: string): Promise<Run[]> {
+  const payload = await apiRequest<{ items: Run[] }>(`/projects/${projectId}/runs`);
   return payload.items;
 }
 
-export async function getRun(runId: string): Promise<Run> {
-  const response = await fetch(`${apiUrl}/v1/runs/${runId}`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(response.status === 404 ? "Run not found" : "Unable to load run");
-  }
-  return (await response.json()) as Run;
+export function getRun(projectId: string, runId: string): Promise<Run> {
+  return apiRequest(`/projects/${projectId}/runs/${runId}`);
 }
 
-export async function createRun(request: RunRequest): Promise<Run> {
-  const response = await fetch(`${apiUrl}/v1/runs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(payload?.detail ?? `Unable to create run: ${response.status}`);
-  }
-  return (await response.json()) as Run;
+export function getRunExecutions(projectId: string, runId: string): Promise<TestExecution[]> {
+  return apiRequest(`/projects/${projectId}/runs/${runId}/executions`);
 }
