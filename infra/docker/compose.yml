@@ -1,0 +1,34 @@
+name: histograph
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: histograph
+      POSTGRES_USER: histograph
+      POSTGRES_PASSWORD: histograph
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U histograph"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - histograph-postgres:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      HISTOGRAPH_DATABASE_URL: postgresql+asyncpg://histograph:histograph@postgres:5432/histograph
+      HISTOGRAPH_ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  histograph-postgres:
