@@ -77,7 +77,11 @@ export function ProjectOperations({
       event?.currentTarget.reset();
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The operation could not be completed");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The operation could not be completed",
+      );
     } finally {
       setActive(null);
     }
@@ -124,132 +128,78 @@ export function ProjectOperations({
     router.push(`/projects/${projectId}/runs/${run.id}`);
   }
 
-  async function approveBaseline(questionId: string, baselineId: string, form: FormData) {
+  async function approveBaseline(
+    questionId: string,
+    baselineId: string,
+    form: FormData,
+  ) {
     await mutate(
       `/projects/${projectId}/protected-questions/${questionId}/baselines/${baselineId}/approve`,
       { justification: form.get("justification") },
     );
   }
 
+  async function runAllQuestions() {
+    const run = await mutate<Run>(
+      `/projects/${projectId}/runs`,
+      { trigger_type: "manual", selection: { all_active: true } },
+      { idempotencyKey: crypto.randomUUID() },
+    );
+    router.push(`/projects/${projectId}/runs/${run.id}`);
+  }
+
   return (
     <div className="operations-stack">
-      <section className="operations-grid">
-        <article className="configuration-card">
-          <div className="card-heading">
-            <span className={repositories.some((item) => item.active) ? "ready-dot" : "empty-dot"} />
-            <div>
-              <h3>GitHub checks</h3>
-              <p>Map code changes to DataHub assets and gate the exact commit.</p>
-            </div>
-          </div>
-          {githubInstallUrl ? (
-            <a className="secondary-link" href={githubInstallUrl} rel="noreferrer" target="_blank">
-              Install Histograph GitHub App ↗
-            </a>
-          ) : (
-            <p className="muted-copy">Set HISTOGRAPH_GITHUB_INSTALL_URL to expose installation.</p>
-          )}
-          <form
-            onSubmit={(event) =>
-              submit(
-                "github-installation",
-                () => connectInstallation(new FormData(event.currentTarget)),
-                event,
-              )
-            }
-          >
-            <input name="installation-id" inputMode="numeric" placeholder="GitHub installation ID" required />
-            <button disabled={active === "github-installation"}>Connect installation</button>
-          </form>
-          {githubInstallations.length ? (
-            <form
-              onSubmit={(event) =>
-                submit(
-                  "repository",
-                  () => connectRepository(new FormData(event.currentTarget)),
-                  event,
-                )
-              }
-            >
-              <select name="github-installation-id" required defaultValue="">
-                <option value="" disabled>Select installation</option>
-                {githubInstallations.map((installation) => (
-                  <option key={installation.id} value={installation.id}>{installation.account_login}</option>
-                ))}
-              </select>
-              <input name="repository-id" inputMode="numeric" placeholder="GitHub repository ID" required />
-              <input name="protected-branches" placeholder="Protected branches, comma-separated" />
-              <textarea
-                name="asset-mappings"
-                rows={4}
-                placeholder="models/revenue/*.sql => urn:li:dataset:(...)"
-              />
-              <label className="checkbox-row"><input defaultChecked name="run-all-when-unmapped" type="checkbox" /> Run all protected questions when a change cannot be mapped</label>
-              <label className="checkbox-row"><input name="run-drafts" type="checkbox" /> Run checks on draft pull requests</label>
-              <button disabled={active === "repository"}>Connect repository</button>
-            </form>
-          ) : null}
-          {repositories.map((repository) => (
-            <p className="connected-resource" key={repository.id}>
-              {repository.full_name} <strong>{repository.active ? "active" : "disabled"}</strong>
-            </p>
-          ))}
-        </article>
-
-        <article className="configuration-card">
-          <div className="card-heading">
-            <span className={schedules.length ? "ready-dot" : "empty-dot"} />
-            <div><h3>Continuous schedules</h3><p>Rerun agents even when Git and metadata stay quiet.</p></div>
-          </div>
-          <form
-            onSubmit={(event) =>
-              submit("schedule", () => createSchedule(new FormData(event.currentTarget)), event)
-            }
-          >
-            <input name="name" placeholder="Nightly executive assurance" required />
-            <input name="cron-expression" defaultValue="0 2 * * *" required />
-            <input name="timezone" defaultValue={timezone} required />
-            <select name="target" required defaultValue="">
-              <option value="" disabled>Select suite or question</option>
-              {suites.map((suite) => <option key={suite.id} value={`suite:${suite.id}`}>Suite · {suite.name}</option>)}
-              {questions.map((question) => <option key={question.id} value={`question:${question.id}`}>Question · {question.name}</option>)}
-            </select>
-            <select name="concurrency-policy" defaultValue="skip">
-              <option value="skip">Skip overlapping run</option>
-              <option value="queue">Queue overlapping run</option>
-              <option value="replace">Replace overlapping run</option>
-            </select>
-            <button disabled={active === "schedule" || (!suites.length && !questions.length)}>Create schedule</button>
-          </form>
-          {schedules.map((schedule) => (
-            <p className="connected-resource" key={schedule.id}>
-              {schedule.name} <strong>{schedule.cron_expression}</strong>
-            </p>
-          ))}
-        </article>
-      </section>
-
+      <div className="checks-toolbar">
+        <div>
+          <h2>Protected questions</h2>
+          <p>Questions Histograph checks whenever their context changes.</p>
+        </div>
+        <button
+          className="primary-button"
+          disabled={active === "run-all"}
+          onClick={() => submit("run-all", runAllQuestions)}
+          type="button"
+        >
+          {active === "run-all" ? "Starting…" : "Run checks"}
+        </button>
+      </div>
       <section className="question-list">
         {questions.map((question) => {
           const questionBaselines = baselines.filter(
             (baseline) => baseline.protected_question_id === question.id,
           );
-          const draft = questionBaselines.find((baseline) => baseline.status === "draft");
+          const draft = questionBaselines.find(
+            (baseline) => baseline.status === "draft",
+          );
           return (
             <article className="question-row" key={question.id}>
               <div>
-                <span className="eyebrow">{question.criticality}</span>
                 <h3>{question.name}</h3>
-                <p>{question.stable_key}</p>
+                <p>{question.criticality} importance</p>
               </div>
               <div className="question-actions">
-                <span className={question.active_baseline_id ? "baseline-ready" : "baseline-missing"}>
-                  {question.active_baseline_id ? "Baseline approved" : draft ? "Draft ready" : "Needs baseline"}
+                <span
+                  className={
+                    question.active_baseline_id
+                      ? "baseline-ready"
+                      : "baseline-missing"
+                  }
+                >
+                  {question.active_baseline_id
+                    ? "Baseline approved"
+                    : draft
+                      ? "Draft ready"
+                      : "Needs baseline"}
                 </span>
                 {!draft && !question.active_baseline_id ? (
                   <button
                     disabled={active === `capture-${question.id}`}
-                    onClick={() => submit(`capture-${question.id}`, () => captureBaseline(question.id))}
+                    onClick={() =>
+                      submit(`capture-${question.id}`, () =>
+                        captureBaseline(question.id),
+                      )
+                    }
                     type="button"
                   >
                     Capture baseline
@@ -261,21 +211,206 @@ export function ProjectOperations({
                     onSubmit={(event) =>
                       submit(
                         `approve-${draft.id}`,
-                        () => approveBaseline(question.id, draft.id, new FormData(event.currentTarget)),
+                        () =>
+                          approveBaseline(
+                            question.id,
+                            draft.id,
+                            new FormData(event.currentTarget),
+                          ),
                         event,
                       )
                     }
                   >
-                    <input name="justification" placeholder="Approval justification" minLength={8} required />
-                    <button disabled={active === `approve-${draft.id}`}>Approve draft v{draft.version}</button>
+                    <input
+                      name="justification"
+                      placeholder="Approval justification"
+                      minLength={8}
+                      required
+                    />
+                    <button disabled={active === `approve-${draft.id}`}>
+                      Approve draft v{draft.version}
+                    </button>
                   </form>
                 ) : null}
               </div>
             </article>
           );
         })}
-        {!questions.length ? <div className="empty-state">Create a protected question to establish its baseline.</div> : null}
+        {!questions.length ? (
+          <div className="empty-state">
+            Create a protected question to establish its baseline.
+          </div>
+        ) : null}
       </section>
+
+      <details className="settings-panel">
+        <summary>Automation</summary>
+        <div className="operations-grid settings-content">
+          {githubInstallUrl ||
+          githubInstallations.length ||
+          repositories.length ? (
+            <article className="configuration-card">
+              <div className="card-heading">
+                <div>
+                  <h3>GitHub</h3>
+                  <p>Run checks when connected repositories change.</p>
+                </div>
+              </div>
+              {githubInstallUrl ? (
+                <a
+                  className="secondary-link"
+                  href={githubInstallUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Install GitHub App ↗
+                </a>
+              ) : null}
+              {githubInstallations.length ? (
+                <form
+                  onSubmit={(event) =>
+                    submit(
+                      "repository",
+                      () =>
+                        connectRepository(new FormData(event.currentTarget)),
+                      event,
+                    )
+                  }
+                >
+                  <select
+                    name="github-installation-id"
+                    required
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      Select GitHub account
+                    </option>
+                    {githubInstallations.map((installation) => (
+                      <option key={installation.id} value={installation.id}>
+                        {installation.account_login}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    name="repository-id"
+                    inputMode="numeric"
+                    placeholder="Repository ID"
+                    required
+                  />
+                  <details className="advanced-fields">
+                    <summary>Change mapping</summary>
+                    <input
+                      name="protected-branches"
+                      placeholder="Protected branches"
+                    />
+                    <textarea
+                      name="asset-mappings"
+                      rows={4}
+                      placeholder="models/revenue/*.sql => DataHub URN"
+                    />
+                    <label className="checkbox-row">
+                      <input
+                        defaultChecked
+                        name="run-all-when-unmapped"
+                        type="checkbox"
+                      />{" "}
+                      Run every check when a change cannot be mapped
+                    </label>
+                    <label className="checkbox-row">
+                      <input name="run-drafts" type="checkbox" /> Include draft
+                      pull requests
+                    </label>
+                  </details>
+                  <button disabled={active === "repository"}>
+                    Connect repository
+                  </button>
+                </form>
+              ) : githubInstallUrl ? (
+                <details className="advanced-fields">
+                  <summary>Connect an existing installation</summary>
+                  <form
+                    onSubmit={(event) =>
+                      submit(
+                        "github-installation",
+                        () =>
+                          connectInstallation(
+                            new FormData(event.currentTarget),
+                          ),
+                        event,
+                      )
+                    }
+                  >
+                    <input
+                      name="installation-id"
+                      inputMode="numeric"
+                      placeholder="Installation ID"
+                      required
+                    />
+                    <button disabled={active === "github-installation"}>
+                      Connect
+                    </button>
+                  </form>
+                </details>
+              ) : null}
+              {repositories.map((repository) => (
+                <p className="connected-resource" key={repository.id}>
+                  {repository.full_name}
+                  <strong>{repository.active ? "active" : "disabled"}</strong>
+                </p>
+              ))}
+            </article>
+          ) : null}
+
+          <article className="configuration-card">
+            <div className="card-heading">
+              <div>
+                <h3>Schedule</h3>
+                <p>Run checks automatically.</p>
+              </div>
+            </div>
+            <form
+              onSubmit={(event) =>
+                submit(
+                  "schedule",
+                  () => createSchedule(new FormData(event.currentTarget)),
+                  event,
+                )
+              }
+            >
+              <input name="name" placeholder="Nightly checks" required />
+              <select name="target" required defaultValue="">
+                <option value="" disabled>
+                  Choose checks
+                </option>
+                {suites.map((suite) => (
+                  <option key={suite.id} value={`suite:${suite.id}`}>
+                    {suite.name}
+                  </option>
+                ))}
+                {questions.map((question) => (
+                  <option key={question.id} value={`question:${question.id}`}>
+                    {question.name}
+                  </option>
+                ))}
+              </select>
+              <input name="cron-expression" defaultValue="0 2 * * *" required />
+              <input name="timezone" defaultValue={timezone} required />
+              <select name="concurrency-policy" defaultValue="skip">
+                <option value="skip">Skip if already running</option>
+                <option value="queue">Run next</option>
+                <option value="replace">Replace current run</option>
+              </select>
+              <button disabled={active === "schedule"}>Create schedule</button>
+            </form>
+            {schedules.map((schedule) => (
+              <p className="connected-resource" key={schedule.id}>
+                {schedule.name}
+                <strong>{schedule.cron_expression}</strong>
+              </p>
+            ))}
+          </article>
+        </div>
+      </details>
 
       {error ? <p className="form-error">{error}</p> : null}
     </div>

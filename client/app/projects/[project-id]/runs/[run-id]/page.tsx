@@ -19,74 +19,99 @@ export default async function RunPage({ params }: RunPageProps) {
 
   return (
     <main className="run-detail">
-      <Link className="back-link" href={`/projects/${projectId}`}>← Project</Link>
+      <Link className="back-link" href={`/projects/${projectId}`}>
+        ← Project
+      </Link>
       <section className="run-heading">
         <div>
-          <p className="eyebrow">{run.trigger_type.replaceAll("_", " ")} run</p>
-          <h1>Behavioral assurance</h1>
-          <p className="run-id">{run.id}</p>
+          <p className="run-kicker">
+            {run.trigger_type.replaceAll("_", " ")} run ·{" "}
+            {new Date(run.queued_at).toLocaleString()}
+          </p>
+          <h1>Run results</h1>
         </div>
         <StatusBadge status={run.status} />
       </section>
 
-      {run.error_message ? <section className="error-panel">{run.error_message}</section> : null}
+      {run.error_message ? (
+        <section className="error-panel">{run.error_message}</section>
+      ) : null}
 
-      <section className="detail-grid">
-        <article className="detail-card">
-          <p className="eyebrow">Impact plan</p>
-          <h2>{plan?.selected_test_ids?.length ?? 0} questions selected</h2>
-          <p>Risk: <strong>{plan?.risk_level ?? "pending"}</strong></p>
-          {plan?.changed_asset_urns?.length ? (
-            <ul className="asset-list">{plan.changed_asset_urns.map((urn) => <li key={urn}>{urn}</li>)}</ul>
-          ) : <p className="muted-copy">No metadata assets were supplied by this trigger.</p>}
-        </article>
-        <article className="detail-card">
-          <p className="eyebrow">Evaluation</p>
-          <h2>{report ? `${report.passed} passed · ${report.failed} failed` : "Waiting for evidence"}</h2>
-          {report ? <p>{report.errors} infrastructure errors · {report.warnings} warnings</p> : null}
-        </article>
+      <section className="result-summary">
+        <div>
+          <strong>
+            {plan?.selected_test_ids?.length ?? executions.length}
+          </strong>
+          <span>questions checked</span>
+        </div>
+        <div>
+          <strong>{report?.passed ?? 0}</strong>
+          <span>passed</span>
+        </div>
+        <div>
+          <strong>{report?.failed ?? 0}</strong>
+          <span>failed</span>
+        </div>
+        <div>
+          <strong>{report?.errors ?? 0}</strong>
+          <span>errors</span>
+        </div>
       </section>
 
       {plan?.unknowns?.length ? (
-        <section className="detail-section">
-          <div className="section-title"><div><p className="eyebrow">Action required</p><h2>Unresolved context</h2></div></div>
-          <div className="findings">{plan.unknowns.map((unknown) => <article className="finding" key={unknown}><span className="finding-fail">Review</span><strong>{unknown}</strong></article>)}</div>
+        <section className="attention-panel">
+          <h2>Needs attention</h2>
+          <ul>
+            {plan.unknowns.map((unknown) => (
+              <li key={unknown}>{unknown}</li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
-      <section className="detail-section">
-        <div className="section-title">
-          <div><p className="eyebrow">Protected behavior</p><h2>Test executions</h2></div>
-          <p>Every attempt is tied to immutable test, baseline, target and evidence references.</p>
+      <section className="page-section compact-section">
+        <div className="simple-section-title">
+          <h2>Checks</h2>
         </div>
         {executions.length ? (
           <div className="execution-list">
-            {executions.map((execution) => (
+            {executions.map((execution, index) => (
               <article className="execution-card" key={execution.id}>
                 <div className="execution-heading">
-                  <div><span className="run-id">{execution.protected_question_id}</span><h3>{execution.trace_id}</h3></div>
+                  <h3>Check {index + 1}</h3>
                   <StatusBadge status={execution.status} />
                 </div>
-                {execution.error_message ? <p className="error-panel">{execution.error_message}</p> : null}
+                {execution.error_message ? (
+                  <p className="error-panel">{execution.error_message}</p>
+                ) : null}
                 <div className="findings">
                   {execution.evaluation_json?.findings?.map((finding) => (
-                    <div className="finding" key={`${execution.id}-${finding.code}`}>
-                      <span className={finding.passed ? "finding-pass" : "finding-fail"}>
-                        {finding.passed ? "Pass" : finding.level}
+                    <div
+                      className="finding"
+                      key={`${execution.id}-${finding.code}`}
+                    >
+                      <span
+                        className={
+                          finding.passed ? "finding-pass" : "finding-fail"
+                        }
+                      >
+                        {finding.passed ? "Pass" : "Fail"}
                       </span>
-                      <div><strong>{finding.message}</strong><code>{finding.code}</code></div>
+                      <strong>{finding.message}</strong>
                     </div>
                   ))}
                 </div>
-                <dl className="execution-metadata">
-                  <div><dt>Attempts</dt><dd>{execution.attempt_count}</dd></div>
-                  <div><dt>Started</dt><dd>{execution.started_at ? new Date(execution.started_at).toLocaleString() : "Pending"}</dd></div>
-                  <div><dt>Completed</dt><dd>{execution.completed_at ? new Date(execution.completed_at).toLocaleString() : "Pending"}</dd></div>
-                </dl>
+                {execution.attempt_count > 1 ? (
+                  <p className="attempt-note">
+                    Completed after {execution.attempt_count} attempts.
+                  </p>
+                ) : null}
               </article>
             ))}
           </div>
-        ) : <div className="empty-state">No test execution evidence has been recorded yet.</div>}
+        ) : (
+          <div className="empty-state">No checks were run.</div>
+        )}
       </section>
     </main>
   );

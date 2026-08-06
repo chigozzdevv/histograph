@@ -23,9 +23,20 @@ body {
   margin: 0;
   color: var(--ink);
   background:
-    radial-gradient(circle at 10% 0%, rgba(23, 79, 60, 0.09), transparent 28rem),
+    radial-gradient(
+      circle at 10% 0%,
+      rgba(23, 79, 60, 0.09),
+      transparent 28rem
+    ),
     var(--background);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 
 a {
@@ -241,7 +252,9 @@ textarea {
   border: 1px solid #cbc9c1;
   border-radius: 9px;
   outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 input:focus,
@@ -520,7 +533,9 @@ textarea {
   min-height: 190px;
   display: flex;
   flex-direction: column;
-  transition: border-color 150ms ease, transform 150ms ease;
+  transition:
+    border-color 150ms ease,
+    transform 150ms ease;
 }
 
 .project-card:hover {
@@ -901,6 +916,324 @@ textarea {
   font-size: 13px;
 }
 
+.home-page {
+  padding-top: 72px;
+}
+
+.page-section {
+  padding: 42px 0;
+}
+
+.compact-section {
+  padding-top: 28px;
+}
+
+.page-title,
+.simple-section-title,
+.checks-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.page-title {
+  margin-bottom: 30px;
+}
+
+.page-title h1,
+.simple-section-title h2,
+.checks-toolbar h2 {
+  margin: 0;
+  letter-spacing: -0.04em;
+}
+
+.page-title h1 {
+  font-size: 42px;
+}
+
+.page-title p,
+.checks-toolbar p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.project-heading {
+  padding-bottom: 34px;
+}
+
+.project-heading h1 {
+  font-size: clamp(40px, 6vw, 58px);
+}
+
+.environment-label {
+  width: fit-content;
+  padding: 5px 9px;
+  color: var(--green) !important;
+  background: var(--green-soft);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.setup-section {
+  max-width: 720px;
+  padding: 12px 0 72px;
+}
+
+.setup-shell {
+  display: grid;
+  gap: 26px;
+}
+
+.setup-progress {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  list-style: none;
+}
+
+.setup-progress li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #979c98;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.setup-progress li::after {
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+  content: "";
+}
+
+.setup-progress li:last-child::after {
+  display: none;
+}
+
+.setup-progress li > span {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  background: #e5e4df;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.setup-progress .current,
+.setup-progress .complete {
+  color: var(--green);
+}
+
+.setup-progress .current > span {
+  color: white;
+  background: var(--green);
+}
+
+.setup-progress .complete > span {
+  background: var(--green-soft);
+}
+
+.setup-card {
+  padding: 30px;
+  display: grid;
+  gap: 17px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 14px 45px rgba(23, 32, 28, 0.05);
+}
+
+.setup-card > label,
+.advanced-fields label {
+  display: grid;
+  gap: 7px;
+  color: #39433e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.setup-card label small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.setup-card > button,
+.settings-content button {
+  width: fit-content;
+  padding: 12px 16px;
+  color: white;
+  background: var(--green);
+  border: 0;
+  border-radius: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.setup-card > button:disabled,
+.settings-content button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.connection-confirmed {
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: #f1f6f3;
+  border: 1px solid var(--green-soft);
+  border-radius: 11px;
+}
+
+.connection-confirmed > span {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: var(--green);
+  border-radius: 50%;
+  font-size: 12px;
+}
+
+.connection-confirmed div {
+  display: grid;
+  gap: 2px;
+}
+
+.connection-confirmed small {
+  color: var(--muted);
+}
+
+.advanced-fields {
+  padding: 2px 0;
+}
+
+.advanced-fields summary,
+.settings-panel > summary {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.advanced-fields[open] {
+  display: grid;
+  gap: 12px;
+}
+
+.advanced-fields > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.overview-strip,
+.result-summary {
+  padding: 22px 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.overview-strip div,
+.result-summary div {
+  display: grid;
+  gap: 4px;
+  border-right: 1px solid var(--line);
+  text-align: center;
+}
+
+.overview-strip div:last-child,
+.result-summary div:last-child {
+  border-right: 0;
+}
+
+.overview-strip strong,
+.result-summary strong {
+  font-size: 24px;
+  text-transform: capitalize;
+}
+
+.overview-strip span,
+.result-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checks-toolbar {
+  margin-bottom: 22px;
+}
+
+.settings-panel {
+  margin-top: 24px;
+  padding: 18px 20px;
+  background: rgba(255, 253, 248, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+
+.settings-panel[open] > summary {
+  margin-bottom: 20px;
+}
+
+.settings-content {
+  padding-top: 4px;
+}
+
+.connection-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.simple-section-title {
+  margin-bottom: 18px;
+}
+
+.run-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.result-summary {
+  margin-bottom: 28px;
+}
+
+.attention-panel {
+  margin: 28px 0 0;
+  padding: 20px 22px;
+  color: #745018;
+  background: #f4e8c9;
+  border-radius: 13px;
+}
+
+.attention-panel h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.attention-panel ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.attempt-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 @media (max-width: 760px) {
   .header-label {
     display: none;
@@ -916,8 +1249,24 @@ textarea {
   .configuration-grid,
   .question-form,
   .operations-grid,
-  .question-row {
+  .question-row,
+  .connection-list {
     grid-template-columns: 1fr;
+  }
+
+  .overview-strip,
+  .result-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 20px;
+  }
+
+  .overview-strip div:nth-child(2),
+  .result-summary div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .setup-progress li {
+    font-size: 11px;
   }
 
   .section-title,

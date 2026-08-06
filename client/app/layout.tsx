@@ -21,7 +21,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
             <span className="wordmark-mark">H</span>
             Histograph
           </a>
-          <span className="header-label">Context CI/CD</span>
         </header>
         {children}
       </body>
