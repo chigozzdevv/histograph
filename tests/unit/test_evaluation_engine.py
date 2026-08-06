@@ -1,4 +1,4 @@
-from histograph_domain import (
+from histograph.domain import (
     AgentEvent,
     AgentEventType,
     AssetAssertions,
@@ -11,7 +11,7 @@ from histograph_domain import (
     SqlExecution,
     TestCase,
 )
-from histograph_evaluation import EvaluationEngine
+from histograph.evaluation import EvaluationEngine
 
 NET_REVENUE_URN = "urn:li:dataset:(urn:li:dataPlatform:postgres,finance.net_revenue,PROD)"
 

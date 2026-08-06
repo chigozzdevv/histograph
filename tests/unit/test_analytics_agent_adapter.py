@@ -1,8 +1,9 @@
 import json
 
 import httpx
-from histograph_agents import DataHubAnalyticsAgentAdapter
-from histograph_domain import AgentEventType, AnalyticsAgentTarget
+
+from histograph.agents import DataHubAnalyticsAgentAdapter
+from histograph.domain import AgentEventType, AnalyticsAgentTarget
 
 
 async def test_adapter_consumes_real_analytics_agent_sse_shape() -> None:

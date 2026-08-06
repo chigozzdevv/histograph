@@ -1,4 +1,4 @@
-from histograph_domain import (
+from histograph.domain import (
     AgentEvent,
     AgentEventType,
     AnalyticsAgentTarget,
@@ -11,7 +11,7 @@ from histograph_domain import (
     SqlAssertions,
     TestCase,
 )
-from histograph_runner import Runner
+from histograph.runner import Runner
 
 
 class DataHubProvider:

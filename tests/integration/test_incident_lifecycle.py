@@ -6,8 +6,10 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from histograph_api.config import Settings
-from histograph_api.database.models import (
+from sqlalchemy import select
+
+from histograph.api.config import Settings
+from histograph.api.database.models import (
     DataHubConnectionRecord,
     DataHubWritebackRecord,
     IncidentOccurrenceRecord,
@@ -15,24 +17,23 @@ from histograph_api.database.models import (
     ProtectedQuestionRecord,
     RunRecord,
 )
-from histograph_api.database.models import (
+from histograph.api.database.models import (
     TestExecutionRecord as ExecutionRecord,
 )
-from histograph_api.database.models import (
+from histograph.api.database.models import (
     TestVersionRecord as VersionRecord,
 )
-from histograph_api.database.models.common import (
+from histograph.api.database.models.common import (
     ConnectionStatus,
     ExecutionStatus,
     IncidentStatus,
     RunStatus,
     TriggerType,
 )
-from histograph_api.database.session import create_database
-from histograph_api.main import create_app
-from histograph_security import EnvelopeCipher, generate_encryption_key, stable_fingerprint
-from histograph_worker.incidents import IncidentManager
-from sqlalchemy import select
+from histograph.api.database.session import create_database
+from histograph.api.main import create_app
+from histograph.security import EnvelopeCipher, generate_encryption_key, stable_fingerprint
+from histograph.worker.incidents import IncidentManager
 
 
 @dataclass

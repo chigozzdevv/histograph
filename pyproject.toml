@@ -34,34 +34,12 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = [
-    "packages/domain/src/histograph_domain",
-    "packages/datahub/src/histograph_datahub",
-    "packages/agents/src/histograph_agents",
-    "packages/evaluation/src/histograph_evaluation",
-    "packages/github/src/histograph_github",
-    "packages/security/src/histograph_security",
-    "packages/storage/src/histograph_storage",
-    "packages/workflows/src/histograph_workflows",
-    "server/runner/src/histograph_runner",
-    "server/worker/src/histograph_worker",
-    "server/api/src/histograph_api",
-]
+packages = ["src/histograph"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests", "packages", "server"]
-pythonpath = [
-    "packages/domain/src",
-    "packages/datahub/src",
-    "packages/agents/src",
-    "packages/evaluation/src",
-    "packages/github/src",
-    "packages/storage/src",
-    "server/runner/src",
-    "server/worker/src",
-    "server/api/src",
-]
+testpaths = ["tests", "src"]
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100

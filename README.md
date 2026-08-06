@@ -60,23 +60,23 @@ The deployable execution mode is managed execution: the worker must be able to r
 
 ```text
 client/                 Next.js dashboard and authenticated server-side API proxy
-server/api/             FastAPI control plane, authentication, routes, and migrations
-server/runner/          DataHub and Analytics Agent execution runtime
-server/worker/          Temporal activities and DataHub incident coordination
-packages/domain/        Canonical execution contracts
-packages/datahub/       DataHub MCP and GraphQL clients
-packages/agents/        DataHub Analytics Agent adapter
-packages/evaluation/    Deterministic evaluation engine
-packages/github/        GitHub App authentication, API, and webhook security
-packages/security/      Envelope encryption and service-token primitives
-packages/storage/       S3-compatible evidence storage
-packages/workflows/     Temporal workflow definitions and payloads
+src/histograph/api/     FastAPI control plane, authentication, routes, and migrations
+src/histograph/worker/  Temporal activities and DataHub incident coordination
+src/histograph/runner/  DataHub and Analytics Agent execution runtime
+src/histograph/domain/  Canonical execution contracts
+src/histograph/datahub/ DataHub MCP and GraphQL clients
+src/histograph/agents/  DataHub Analytics Agent adapter
+src/histograph/evaluation/ Deterministic evaluation engine
+src/histograph/github/  GitHub App authentication, API, and webhook security
+src/histograph/security/ Envelope encryption and service-token primitives
+src/histograph/storage/ S3-compatible evidence storage
+src/histograph/workflows/ Temporal workflow definitions and payloads
 infra/docker/           Container images and the complete local topology
 tests/                  Unit and PostgreSQL integration verification
 SPEC.md                 Product behavior and architecture source of truth
 ```
 
-Python modules use the `histograph_*` package namespace. TypeScript files use kebab-case filenames and `@/...` imports inside the client.
+Python modules use the `histograph.*` package namespace. TypeScript files use kebab-case filenames and `@/...` imports inside the client.
 
 ## Local deployment
 
@@ -207,13 +207,13 @@ Apply migrations before starting the API:
 
 ```bash
 .venv/bin/alembic upgrade head
-.venv/bin/uvicorn histograph_api.main:app_factory --factory --reload --port 8000
+.venv/bin/uvicorn histograph.api.main:app_factory --factory --reload --port 8000
 ```
 
 In separate terminals:
 
 ```bash
-.venv/bin/python -m histograph_worker.main
+.venv/bin/python -m histograph.worker.main
 pnpm dev
 ```
 

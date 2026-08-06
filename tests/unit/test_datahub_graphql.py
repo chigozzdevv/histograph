@@ -2,7 +2,8 @@ import json
 
 import httpx
 import pytest
-from histograph_datahub import DataHubGraphqlClient, DataHubGraphqlError
+
+from histograph.datahub import DataHubGraphqlClient, DataHubGraphqlError
 
 
 @pytest.mark.asyncio

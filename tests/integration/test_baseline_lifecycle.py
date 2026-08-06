@@ -7,8 +7,10 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from histograph_api.config import Settings
-from histograph_api.database.models import (
+from sqlalchemy import select
+
+from histograph.api.config import Settings
+from histograph.api.database.models import (
     AgentTargetRecord,
     BaselineDependencyRecord,
     BaselineVersionRecord,
@@ -16,16 +18,15 @@ from histograph_api.database.models import (
     ProtectedQuestionRecord,
     RunRecord,
 )
-from histograph_api.database.models.common import BaselineStatus, ConnectionStatus, RunStatus
-from histograph_api.database.session import create_database
-from histograph_api.main import create_app
-from histograph_domain import AgentEvent, AgentEventType, DataHubContextSnapshot
-from histograph_runner import Runner
-from histograph_security import EnvelopeCipher, generate_encryption_key
-from histograph_storage import StoredArtifact
-from histograph_worker.activities import RunActivities
-from histograph_workflows import RunWorkflowInput
-from sqlalchemy import select
+from histograph.api.database.models.common import BaselineStatus, ConnectionStatus, RunStatus
+from histograph.api.database.session import create_database
+from histograph.api.main import create_app
+from histograph.domain import AgentEvent, AgentEventType, DataHubContextSnapshot
+from histograph.runner import Runner
+from histograph.security import EnvelopeCipher, generate_encryption_key
+from histograph.storage import StoredArtifact
+from histograph.worker.activities import RunActivities
+from histograph.workflows import RunWorkflowInput
 
 
 @dataclass
@@ -234,7 +235,7 @@ def test_baseline_capture_approval_and_protected_run(monkeypatch: pytest.MonkeyP
         assert baseline_run_response.status_code == 202
         baseline_run_id = baseline_run_response.json()["id"]
 
-        monkeypatch.setattr("histograph_worker.activities.activity.heartbeat", lambda _: None)
+        monkeypatch.setattr("histograph.worker.activities.activity.heartbeat", lambda _: None)
 
         async def execute_run(run_id: str) -> None:
             engine, session_factory = create_database(settings)

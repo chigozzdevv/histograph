@@ -7,8 +7,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 
 COPY pyproject.toml ./
-COPY packages ./packages
-COPY server ./server
+COPY src ./src
 
 RUN python -m pip install --no-cache-dir .
 
@@ -16,4 +15,4 @@ RUN groupadd --system histograph && useradd --system --gid histograph --home-dir
 
 USER histograph
 
-CMD ["python", "-m", "histograph_worker.main"]
+CMD ["python", "-m", "histograph.worker.main"]

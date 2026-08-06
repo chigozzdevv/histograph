@@ -7,10 +7,11 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from histograph_api.routes.github import _mapped_assets, _push_changed_files
-from histograph_api.schemas.github import AssetMapping
-from histograph_github import GitHubAppClient, verify_webhook_signature
 from pydantic import ValidationError
+
+from histograph.api.routes.github import _mapped_assets, _push_changed_files
+from histograph.api.schemas.github import AssetMapping
+from histograph.github import GitHubAppClient, verify_webhook_signature
 
 
 def test_webhook_signature_requires_matching_sha256_digest() -> None:

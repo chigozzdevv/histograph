@@ -8,8 +8,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY alembic.ini ./
-COPY packages ./packages
-COPY server ./server
+COPY src ./src
 
 RUN python -m pip install --no-cache-dir .
 
@@ -19,4 +18,4 @@ USER histograph
 
 EXPOSE 8000
 
-CMD ["uvicorn", "histograph_api.main:app_factory", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "histograph.api.main:app_factory", "--factory", "--host", "0.0.0.0", "--port", "8000"]

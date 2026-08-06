@@ -1695,19 +1695,19 @@ histograph/
 │   ├── app/
 │   ├── components/
 │   └── lib/
-├── server/
-│   ├── api/                    # FastAPI control plane and webhooks
-│   ├── worker/                 # Workflows, events, and notifications
-│   ├── runner/                 # Private/managed execution runtime
-│   └── migrations/
-├── packages/
-│   ├── domain/                 # Canonical domain models and state machines
-│   ├── datahub/                # Context, event, mapping, and write-back client
-│   ├── agents/                 # Impact, diagnosis, and target adapters
-│   ├── evaluation/             # Assertions and SQL/result evaluators
-│   ├── dbt/                    # Manifest analysis and preview metadata
-│   ├── github/                 # GitHub App and Check helpers
-│   └── api-client/             # Generated client for the web app
+├── src/
+│   └── histograph/
+│       ├── api/                # FastAPI control plane, webhooks, and migrations
+│       ├── worker/             # Temporal activities and incident coordination
+│       ├── runner/             # Managed execution runtime
+│       ├── domain/             # Canonical domain models and state machines
+│       ├── datahub/            # Context, lineage, and write-back clients
+│       ├── agents/             # Analytics Agent adapters
+│       ├── evaluation/         # Assertions and SQL/result evaluators
+│       ├── github/             # GitHub App and Check helpers
+│       ├── security/           # Encryption and service-token primitives
+│       ├── storage/            # Evidence object storage
+│       └── workflows/          # Temporal workflow definitions
 ├── infra/
 │   ├── docker/
 │   ├── helm/
@@ -1732,7 +1732,7 @@ histograph/
 └── .env.example
 ```
 
-Canonical contracts live in `packages/domain`. Generated API clients and schemas must not be hand-edited. Installation, local development, integration setup, architecture, security, and operations remain in `README.md` and this specification rather than a duplicative documentation tree.
+Canonical contracts live in `src/histograph/domain`. Generated API clients and schemas must not be hand-edited. Installation, local development, integration setup, architecture, security, and operations remain in `README.md` and this specification rather than a duplicative documentation tree.
 
 ---
 
