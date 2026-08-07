@@ -25,6 +25,8 @@ class DataHubMcpClient:
         environment["DATAHUB_GMS_URL"] = self._settings.datahub_gms_url
         if self._settings.datahub_gms_token:
             environment["DATAHUB_GMS_TOKEN"] = self._settings.datahub_gms_token
+        if self._settings.datahub_mcp_mutations_enabled:
+            environment["TOOLS_IS_MUTATION_ENABLED"] = "true"
 
         parameters = StdioServerParameters(
             command=self._settings.datahub_mcp_command,
@@ -32,10 +34,11 @@ class DataHubMcpClient:
             env=environment,
         )
         try:
-            async with stdio_client(parameters) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    yield session
+            with open(os.devnull, "w") as errlog:
+                async with stdio_client(parameters, errlog=errlog) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        yield session
         except Exception as error:
             raise DataHubMcpError(f"DataHub MCP connection failed: {error}") from error
 
@@ -128,6 +131,8 @@ def _payload(result: Any) -> Any:
     if structured is None:
         structured = getattr(result, "structured_content", None)
     if structured is not None:
+        if isinstance(structured, dict) and set(structured) == {"result"}:
+            return structured["result"]
         return structured
 
     texts = _text_parts(result)
