@@ -1,1 +1,0 @@
-"""Histograph continuous assurance platform."""
