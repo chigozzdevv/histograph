@@ -1,0 +1,55 @@
+name: histograph-core
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: histograph
+      POSTGRES_USER: histograph
+      POSTGRES_PASSWORD: histograph
+    ports:
+      - "5433:5432"
+    volumes:
+      - histograph-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U histograph -d histograph"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.7-alpine
+    environment:
+      CLICKHOUSE_DB: histograph
+      CLICKHOUSE_USER: histograph
+      CLICKHOUSE_PASSWORD: histograph
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8124:8123"
+      - "9001:9000"
+    volumes:
+      - histograph-clickhouse:/var/lib/clickhouse
+      - histograph-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - histograph-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  histograph-postgres:
+  histograph-clickhouse:
+  histograph-clickhouse-logs:
+  histograph-redis:
