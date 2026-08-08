@@ -97,6 +97,8 @@ def check_feature_drift(
     )
     incident_id = None
     if event is not None:
+        event_id = request.app.state.monitors.record_event(event, result.evidence)
+        event = event.model_copy(update={"id": event_id})
         incident_id = IncidentService(request.app.state.incidents).create_from_monitor_event(
             event, result.evidence
         )
@@ -130,6 +132,8 @@ def check_performance(
     )
     incident_id = None
     if event is not None:
+        event_id = request.app.state.monitors.record_event(event, result.evidence)
+        event = event.model_copy(update={"id": event_id})
         incident_id = IncidentService(request.app.state.incidents).create_from_monitor_event(
             event, result.evidence
         )

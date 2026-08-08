@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import Field, field_validator, model_validator
 
@@ -47,6 +47,7 @@ class Monitor(EventModel):
 
 
 class MonitorEvent(EventModel):
+    id: UUID = Field(default_factory=uuid4)
     monitor_id: UUID
     model: str
     version: str
