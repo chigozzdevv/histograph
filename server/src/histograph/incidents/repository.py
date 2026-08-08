@@ -113,7 +113,14 @@ class IncidentRepository:
                 (
                     uuid4(),
                     incident_id,
-                    Jsonb({"from": current["status"], "to": status, "reason": reason}),
+                    Jsonb(
+                        {
+                            "from": current["status"],
+                            "to": status,
+                            "reason": reason,
+                            "recovery_verified": status == "resolved",
+                        }
+                    ),
                 ),
             )
             connection.commit()

@@ -1,7 +1,9 @@
 from typing import Any, Protocol
 from uuid import UUID
 
-from histograph.incidents.types import IncidentTransition
+from pydantic import ValidationError
+
+from histograph.incidents.types import IncidentTransition, RecoveryVerification
 from histograph.monitors.types import MonitorEvent
 
 
@@ -55,8 +57,21 @@ class IncidentService:
         current_status = current["status"]
         if transition.status == current_status:
             return current
+        if transition.status == "resolved" and not _has_verified_recovery(current):
+            raise ValueError("Incident cannot be resolved until recovery has been verified")
         if transition.status not in allowed.get(current_status, set()):
             raise ValueError(
                 f"Incident cannot transition from {current_status} to {transition.status}"
             )
         return self._repository.transition(incident_id, transition.status, transition.reason)
+
+
+def _has_verified_recovery(incident: dict[str, Any]) -> bool:
+    evidence = incident.get("evidence")
+    if not isinstance(evidence, dict):
+        return False
+    try:
+        RecoveryVerification.model_validate(evidence.get("recovery"))
+    except ValidationError:
+        return False
+    return True

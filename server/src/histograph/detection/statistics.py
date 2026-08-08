@@ -79,10 +79,15 @@ def population_stability_index(
         raise ValueError("bins must be at least 2")
 
     ordered_baseline = sorted(baseline_values)
-    if ordered_baseline[0] == ordered_baseline[-1] and all(
-        value == ordered_baseline[0] for value in current_values
-    ):
-        return 0.0
+    if ordered_baseline[0] == ordered_baseline[-1]:
+        reference = ordered_baseline[0]
+        matching_current = sum(value == reference for value in current_values)
+        if matching_current == len(current_values):
+            return 0.0
+        return _psi_from_counts(
+            [len(baseline_values), 0],
+            [matching_current, len(current_values) - matching_current],
+        )
 
     boundaries = sorted(
         {
@@ -99,8 +104,12 @@ def population_stability_index(
     for value in current_values:
         current_counts[bisect_right(boundaries, value)] += 1
 
-    baseline_size = len(baseline_values)
-    current_size = len(current_values)
+    return _psi_from_counts(baseline_counts, current_counts)
+
+
+def _psi_from_counts(baseline_counts: list[int], current_counts: list[int]) -> float:
+    baseline_size = sum(baseline_counts)
+    current_size = sum(current_counts)
     epsilon = 1e-6
     score = 0.0
     for baseline_count, current_count in zip(baseline_counts, current_counts, strict=True):

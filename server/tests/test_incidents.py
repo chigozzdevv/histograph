@@ -26,9 +26,45 @@ class FakeIncidentStore:
         return self.record
 
 
-def test_resolving_an_incident_requires_a_reason() -> None:
+def test_manually_closing_an_incident_requires_a_reason() -> None:
     with pytest.raises(ValidationError):
-        IncidentTransition(status="resolved")
+        IncidentTransition(status="closed")
+
+
+def test_resolving_an_incident_requires_verified_recovery() -> None:
+    store = FakeIncidentStore()
+
+    with pytest.raises(ValueError, match="until recovery has been verified"):
+        IncidentService(store).transition(
+            store.incident_id,
+            IncidentTransition(status="resolved"),
+        )
+
+
+def test_resolving_an_incident_accepts_persisted_verified_recovery() -> None:
+    store = FakeIncidentStore()
+    store.record["evidence"] = {
+        "recovery": {
+            "status": "verified",
+            "verified_at": "2026-08-08T12:00:00Z",
+            "checks": [
+                {
+                    "name": "performance_recovered",
+                    "passed": True,
+                    "details": {"accuracy": 0.98},
+                }
+            ],
+        }
+    }
+
+    result = IncidentService(store).transition(
+        store.incident_id,
+        IncidentTransition(status="resolved"),
+    )
+
+    assert result is not None
+    assert result["status"] == "resolved"
+    assert store.transitioned == (store.incident_id, "resolved", None)
 
 
 def test_incident_service_enforces_status_transitions() -> None:

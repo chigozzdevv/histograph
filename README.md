@@ -41,8 +41,8 @@ The headless flow is:
 3. Create a versioned monitor at `/v1/monitors`, or report deployment state so Histograph can
    resolve a monitor without an explicit version.
 4. Run the monitor's detection endpoint.
-5. Investigate a triggered incident at `/v1/investigations/{incident_id}` with its DataHub model
-   URN.
+5. Investigate a triggered incident at `/v1/investigations/{incident_id}`. Histograph resolves the
+   DataHub URN from the model registration rather than accepting it from the investigation request.
 
 The implemented performance evaluator supports binary classification with an explicit positive
 prediction class and actual-outcome value. The implemented drift evaluator supports numeric-feature
@@ -50,6 +50,10 @@ PSI. Monitor creation rejects signal and metric combinations that are not implem
 monitor requires a minimum sample size before it can trigger an incident.
 
 An investigation reads the model entity and both directions of its DataHub lineage through MCP, records the exact tool trace and lineage evidence on the incident, and keeps the incident open until a dependency change is corroborated. Set `HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED=true` and pass `write_back: true` only when the team has approved saving the investigation as a DataHub analysis document.
+
+An incident can enter `resolved` only after persisted recovery evidence contains at least one passed
+verification check. A responsible engineer can instead set it to `closed`, but a manual closure
+requires a reason and is recorded separately in the incident timeline.
 
 ## DataHub
 

@@ -28,3 +28,13 @@ def test_population_stability_index_increases_for_shifted_distribution() -> None
     score = population_stability_index([1, 2, 3, 4], [8, 9, 10, 11])
 
     assert score > 0.0
+
+
+def test_population_stability_index_detects_shift_from_constant_baseline() -> None:
+    score = population_stability_index([1.0] * 100, [10.0] * 100)
+
+    assert score > 0.0
+
+
+def test_population_stability_index_accepts_unchanged_constant_distribution() -> None:
+    assert population_stability_index([1.0] * 100, [1.0] * 100) == 0.0

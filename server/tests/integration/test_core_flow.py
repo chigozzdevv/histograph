@@ -167,10 +167,89 @@ def test_binary_monitor_creates_one_auditable_incident(
             "created"
         ]
 
-        transition_response = client.patch(
+        premature_resolution = client.patch(
             f"/v1/incidents/{incident_id}",
-            json={"status": "resolved", "reason": "Model mapping corrected"},
+            json={"status": "resolved"},
         )
-        assert transition_response.status_code == 200
-        assert transition_response.json()["status"] == "resolved"
-        assert transition_response.json()["resolved_at"] is not None
+        assert premature_resolution.status_code == 409
+        assert premature_resolution.json()["detail"] == (
+            "Incident cannot be resolved until recovery has been verified"
+        )
+
+        close_without_reason = client.patch(
+            f"/v1/incidents/{incident_id}",
+            json={"status": "closed"},
+        )
+        assert close_without_reason.status_code == 422
+
+        manual_close = client.patch(
+            f"/v1/incidents/{incident_id}",
+            json={"status": "closed", "reason": "Model mapping corrected"},
+        )
+        assert manual_close.status_code == 200
+        assert manual_close.json()["status"] == "closed"
+        assert manual_close.json()["resolved_at"] is not None
+
+
+def test_feature_drift_detects_a_shift_from_a_constant_baseline(
+    integration_settings: Settings,
+) -> None:
+    with TestClient(create_app(integration_settings)) as client:
+        model_response = client.put(
+            "/v1/models/fraud",
+            json={
+                "name": "fraud",
+                "task": "binary_classification",
+                "positive_class": "blocked",
+                "positive_actual": "chargeback",
+            },
+        )
+        assert model_response.status_code == 200
+
+        predictions = [
+            ("baseline-1", 1.0, "2026-08-08T11:00:00Z"),
+            ("baseline-2", 1.0, "2026-08-08T11:10:00Z"),
+            ("current-1", 10.0, "2026-08-08T11:50:00Z"),
+            ("current-2", 10.0, "2026-08-08T11:51:00Z"),
+        ]
+        for prediction_id, feature_value, observed_at in predictions:
+            response = client.post(
+                "/v1/events/predictions",
+                json={
+                    "prediction_id": prediction_id,
+                    "model": "fraud",
+                    "version": "v1",
+                    "observed_at": observed_at,
+                    "features": {"merchant_velocity": feature_value},
+                },
+            )
+            assert response.status_code == 202
+
+        monitor_response = client.post(
+            "/v1/monitors",
+            json={
+                "model": "fraud",
+                "version": "v1",
+                "signal": "feature_drift",
+                "metric": "psi",
+                "operator": "gt",
+                "threshold": 0.2,
+                "minimum_sample_size": 2,
+            },
+        )
+        assert monitor_response.status_code == 201
+        monitor_id = monitor_response.json()["id"]
+
+        detection_response = client.post(
+            f"/v1/detection/monitors/{monitor_id}/feature-drift",
+            json={
+                "feature": "merchant_velocity",
+                "as_of": "2026-08-08T12:00:00Z",
+            },
+        )
+
+        assert detection_response.status_code == 200
+        assert detection_response.json()["status"] == "evaluated"
+        assert detection_response.json()["triggered"] is True
+        assert detection_response.json()["observed_value"] > 0.2
+        assert detection_response.json()["incident_id"] is not None
