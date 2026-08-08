@@ -78,6 +78,10 @@ class PostgresStore:
             connection.execute(SCHEMA)
             connection.commit()
 
+    def ping(self) -> None:
+        with self.connection() as connection:
+            connection.execute("SELECT 1").fetchone()
+
     def save_deployment(self, deployment: Deployment) -> UUID:
         deployment_id = uuid4()
         with self.connection() as connection:

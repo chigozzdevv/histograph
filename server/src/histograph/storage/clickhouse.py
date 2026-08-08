@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 
 import clickhouse_connect
+from clickhouse_connect.driver.client import Client
 
 from histograph.actuals.types import Actual
 from histograph.telemetry.types import Prediction
@@ -37,21 +38,34 @@ ORDER BY (prediction_id, observed_at)
 
 class ClickHouseStore:
     def __init__(self, host: str, port: int, database: str, user: str, password: str):
-        self._client = clickhouse_connect.get_client(
-            host=host,
-            port=port,
-            username=user,
-            password=password,
-        )
+        self._host = host
+        self._port = port
         self._database = database
+        self._user = user
+        self._password = password
+        self._client: Client | None = None
+
+    def _connect(self) -> Client:
+        if self._client is None:
+            self._client = clickhouse_connect.get_client(
+                host=self._host,
+                port=self._port,
+                username=self._user,
+                password=self._password,
+            )
+        return self._client
 
     def initialize(self) -> None:
-        self._client.command(f"CREATE DATABASE IF NOT EXISTS {self._database}")
-        self._client.command(SCHEMA.format(database=self._database))
-        self._client.command(ACTUALS_SCHEMA.format(database=self._database))
+        client = self._connect()
+        client.command(f"CREATE DATABASE IF NOT EXISTS {self._database}")
+        client.command(SCHEMA.format(database=self._database))
+        client.command(ACTUALS_SCHEMA.format(database=self._database))
+
+    def ping(self) -> None:
+        self._connect().command("SELECT 1")
 
     def save_prediction(self, prediction: Prediction) -> None:
-        self._client.insert(
+        self._connect().insert(
             f"{self._database}.predictions",
             [
                 [
@@ -86,7 +100,7 @@ class ClickHouseStore:
         )
 
     def save_actual(self, actual: Actual) -> None:
-        self._client.insert(
+        self._connect().insert(
             f"{self._database}.actuals",
             [
                 [
@@ -107,7 +121,7 @@ class ClickHouseStore:
         start: datetime,
         end: datetime,
     ) -> list[float]:
-        result = self._client.query(
+        result = self._connect().query(
             f"""
             SELECT JSONExtractFloat(features_json, %(feature)s)
             FROM {self._database}.predictions
@@ -135,7 +149,7 @@ class ClickHouseStore:
         start: datetime,
         end: datetime,
     ) -> list[tuple[bool, bool]]:
-        result = self._client.query(
+        result = self._connect().query(
             f"""
             SELECT p.predicted_class, a.actual
             FROM {self._database}.predictions AS p
@@ -157,4 +171,6 @@ class ClickHouseStore:
         return pairs
 
     def close(self) -> None:
-        self._client.close()
+        if self._client is not None:
+            self._client.close()
+            self._client = None
