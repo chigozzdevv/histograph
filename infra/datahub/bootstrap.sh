@@ -39,7 +39,8 @@ mkdir -p "$(dirname -- "$DATAHUB_ENV_FILE")"
     printf 'HISTOGRAPH_DATAHUB_GMS_URL=%s\n' "$gms_url"
     printf 'HISTOGRAPH_DATAHUB_GMS_TOKEN=%s\n' "$token"
     printf 'HISTOGRAPH_DATAHUB_MCP_COMMAND=uvx\n'
-    printf 'HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub@latest\n'
+    printf 'HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub==0.6.0\n'
+    printf 'HISTOGRAPH_DATAHUB_MCP_PYTHON=3.13\n'
     printf 'HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED=false\n'
 } >"$DATAHUB_ENV_FILE"
 chmod 600 "$DATAHUB_ENV_FILE"

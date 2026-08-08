@@ -53,13 +53,41 @@ class FakeDataHub:
                                 ),
                                 "type": "DATASET",
                                 "name": "features",
+                                "ownership": {
+                                    "owners": [
+                                        {
+                                            "owner": {
+                                                "urn": "urn:li:corpuser:risk-data",
+                                                "properties": {
+                                                    "displayName": "Risk Data Platform"
+                                                },
+                                            }
+                                        }
+                                    ]
+                                },
                             },
                         }
                     ]
                 }
             },
             "downstream": {"downstreams": {"searchResults": []}},
-            "related_entities": [],
+            "related_entities": [
+                {
+                    "urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,features,PROD)",
+                    "type": "DATASET",
+                    "name": "features",
+                    "ownership": {
+                        "owners": [
+                            {
+                                "owner": {
+                                    "urn": "urn:li:corpuser:risk-data",
+                                    "properties": {"displayName": "Risk Data Platform"},
+                                }
+                            }
+                        ]
+                    },
+                }
+            ],
             "tool_trace": ["get_entities", "get_lineage:upstream", "get_lineage:downstream"],
         }
 
@@ -79,11 +107,13 @@ async def test_investigation_maps_lineage_and_updates_incident():
         max_hops=2,
     )
 
-    assert result["status"] == "lineage_mapped"
+    assert result["status"] == "insufficient_evidence"
+    assert result["lineage_status"] == "mapped"
     assert result["lineage"]["upstream"][0]["name"] == "features"
+    assert result["owners"] == ["Risk Data Platform"]
     assert control.updated is not None
     assert control.updated[0] == control.incident_id
-    assert control.updated[2]["root_cause_status"] == "lineage_mapped"
+    assert control.updated[2]["root_cause_status"] == "insufficient_evidence"
 
 
 @pytest.mark.asyncio

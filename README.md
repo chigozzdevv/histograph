@@ -64,7 +64,8 @@ Run `./infra/datahub/health.sh` to check GMS and the frontend. Stop the local Da
 export HISTOGRAPH_DATAHUB_GMS_URL=http://localhost:8080
 export HISTOGRAPH_DATAHUB_GMS_TOKEN=<token>
 export HISTOGRAPH_DATAHUB_MCP_COMMAND=uvx
-export HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub@latest
+export HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub==0.6.0
+export HISTOGRAPH_DATAHUB_MCP_PYTHON=3.13
 ```
 
 The local DataHub quickstart is separate from the Histograph compose project so its own dependencies and lifecycle remain isolated.

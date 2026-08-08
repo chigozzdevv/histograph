@@ -28,9 +28,17 @@ class DataHubMcpClient:
         if self._settings.datahub_mcp_mutations_enabled:
             environment["TOOLS_IS_MUTATION_ENABLED"] = "true"
 
+        arguments = []
+        if (
+            self._settings.datahub_mcp_command == "uvx"
+            and self._settings.datahub_mcp_python is not None
+        ):
+            arguments.extend(["--python", self._settings.datahub_mcp_python])
+        arguments.append(self._settings.datahub_mcp_package)
+
         parameters = StdioServerParameters(
             command=self._settings.datahub_mcp_command,
-            args=[self._settings.datahub_mcp_package],
+            args=arguments,
             env=environment,
         )
         try:
@@ -57,6 +65,7 @@ class DataHubMcpClient:
         async def collect() -> dict[str, Any]:
             async with self._session() as session:
                 model = await self._call(session, "get_entities", {"urns": [model_urn]})
+                _require_entity(model, model_urn)
                 upstream = await self._call(
                     session,
                     "get_lineage",
@@ -116,7 +125,13 @@ class DataHubMcpClient:
                         "related_assets": related_assets,
                     },
                 )
-                return result if isinstance(result, dict) else {"result": result}
+                if isinstance(result, dict):
+                    if result.get("success") is False:
+                        raise DataHubMcpError(
+                            f"DataHub investigation write-back failed: {result.get('message')}"
+                        )
+                    return result
+                return {"result": result}
 
         try:
             return await asyncio.wait_for(
@@ -171,3 +186,22 @@ def _lineage_urns(payload: Any) -> set[str]:
             if isinstance(entity, Mapping) and isinstance(entity.get("urn"), str):
                 urns.add(entity["urn"])
     return urns
+
+
+def _require_entity(payload: Any, expected_urn: str) -> None:
+    entities = payload if isinstance(payload, list) else [payload]
+    for entity in entities:
+        if (
+            isinstance(entity, Mapping)
+            and entity.get("urn") == expected_urn
+            and not entity.get("error")
+        ):
+            return
+
+    errors = [
+        str(entity.get("error"))
+        for entity in entities
+        if isinstance(entity, Mapping) and entity.get("error")
+    ]
+    detail = "; ".join(errors) if errors else "entity was not returned"
+    raise DataHubMcpError(f"DataHub model {expected_urn} could not be resolved: {detail}")

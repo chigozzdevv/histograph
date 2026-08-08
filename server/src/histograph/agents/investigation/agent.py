@@ -62,29 +62,38 @@ def _build_report(
 ) -> dict[str, Any]:
     upstream = _lineage_entities(context.get("upstream"))
     downstream = _lineage_entities(context.get("downstream"))
+    model_entities = _entity_summaries(context.get("model"))
     related = _entity_summaries(context.get("related_entities"))
+    owners = sorted(
+        {
+            owner
+            for entity in [*model_entities, *related]
+            for owner in entity.get("owners", [])
+        }
+    )
     detection = (incident.get("evidence") or {}).get("detection", {})
     metric = incident.get("metric", "signal")
     model = incident.get("model", "model")
     version = incident.get("version", "unknown")
 
     if not upstream and not downstream:
-        status = "inconclusive"
+        lineage_status = "unavailable"
         summary = (
             f"DataHub returned no lineage for {model} {version}; Histograph cannot establish "
             "a dependency-level explanation or blast radius."
         )
     else:
-        status = "lineage_mapped"
+        lineage_status = "mapped"
         summary = (
             f"Histograph mapped {len(upstream)} upstream dependencies and "
             f"{len(downstream)} downstream consumers for {model} {version}. "
-            f"The {metric} signal is dependency-consistent, but DataHub lineage alone "
-            "does not prove which asset changed."
+            f"The {metric} signal has not been tied to a specific dependency change; "
+            "lineage alone is not root-cause evidence."
         )
 
     return {
-        "status": status,
+        "status": "insufficient_evidence",
+        "lineage_status": lineage_status,
         "summary": summary,
         "model": {"name": model, "version": version, "urn": model_urn},
         "trigger": {
@@ -116,6 +125,7 @@ def _build_report(
             "downstream": downstream,
             "related_entities": related,
         },
+        "owners": owners,
         "evidence": {
             "datahub_model_urn": model_urn,
             "tools": context.get("tool_trace", []),
@@ -202,7 +212,20 @@ def _owner_names(ownership: Any) -> list[str]:
     for owner in owners:
         if not isinstance(owner, dict):
             continue
-        name = owner.get("owner") or owner.get("urn") or owner.get("name")
+        owner_entity = owner.get("owner")
+        if isinstance(owner_entity, dict):
+            editable = owner_entity.get("editableProperties") or {}
+            properties = owner_entity.get("properties") or {}
+            info = owner_entity.get("info") or {}
+            name = (
+                editable.get("displayName")
+                or properties.get("displayName")
+                or info.get("displayName")
+                or owner_entity.get("name")
+                or owner_entity.get("urn")
+            )
+        else:
+            name = owner_entity or owner.get("urn") or owner.get("name")
         if isinstance(name, str):
             names.append(name)
     return names

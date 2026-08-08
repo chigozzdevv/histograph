@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     datahub_gms_url: str = "http://localhost:8080"
     datahub_gms_token: str | None = Field(default=None, repr=False)
     datahub_mcp_command: str = "uvx"
-    datahub_mcp_package: str = "mcp-server-datahub@latest"
+    datahub_mcp_package: str = "mcp-server-datahub==0.6.0"
+    datahub_mcp_python: str | None = "3.13"
     datahub_mcp_timeout_seconds: float = 30.0
     datahub_mcp_mutations_enabled: bool = False
 
