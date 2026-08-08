@@ -40,6 +40,17 @@ An investigation reads the model entity and both directions of its DataHub linea
 
 Histograph connects to a self-hosted DataHub GMS endpoint through the official DataHub MCP server. The integration uses the read-only entity and lineage tools during investigations and writes incident evidence only through an explicit write-back path.
 
+Bootstrap the local DataHub environment with the pinned Quickstart wrapper:
+
+```bash
+./infra/datahub/bootstrap.sh
+set -a
+source infra/datahub/.env
+set +a
+```
+
+Run `./infra/datahub/health.sh` to check GMS and the frontend. Stop the local DataHub instance with `./infra/datahub/stop.sh`.
+
 ```bash
 export HISTOGRAPH_DATAHUB_GMS_URL=http://localhost:8080
 export HISTOGRAPH_DATAHUB_GMS_TOKEN=<token>
