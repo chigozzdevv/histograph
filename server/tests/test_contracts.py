@@ -22,10 +22,12 @@ def test_prediction_normalizes_naive_timestamp_to_utc() -> None:
 
 def test_prediction_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
-        Prediction(
-            prediction_id="p-1",
-            model="fraud-detection",
-            version="v1",
-            observed_at=datetime(2026, 8, 7, 9, 0),
-            unexpected="value",
+        Prediction.model_validate(
+            {
+                "prediction_id": "p-1",
+                "model": "fraud-detection",
+                "version": "v1",
+                "observed_at": datetime(2026, 8, 7, 9, 0),
+                "unexpected": "value",
+            }
         )

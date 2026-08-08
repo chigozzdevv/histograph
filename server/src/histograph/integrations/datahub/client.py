@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -20,7 +20,7 @@ class DataHubMcpClient:
         self._settings = settings
 
     @asynccontextmanager
-    async def _session(self) -> AsyncIterator[ClientSession]:
+    async def _session(self) -> AsyncGenerator[ClientSession]:
         environment = os.environ.copy()
         environment["DATAHUB_GMS_URL"] = self._settings.datahub_gms_url
         if self._settings.datahub_gms_token:

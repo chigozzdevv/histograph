@@ -1,6 +1,6 @@
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from psycopg import Connection, connect
@@ -68,9 +68,9 @@ class PostgresStore:
         self._dsn = dsn
 
     @contextmanager
-    def connection(self) -> Iterator[Connection]:
+    def connection(self) -> Generator[Connection[dict[str, Any]]]:
         with connect(self._dsn, row_factory=dict_row) as connection:
-            yield connection
+            yield cast(Connection[dict[str, Any]], connection)
 
     def initialize(self) -> None:
         with self.connection() as connection:

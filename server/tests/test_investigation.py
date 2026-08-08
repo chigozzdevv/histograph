@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -8,7 +9,7 @@ from histograph.agents.investigation.agent import InvestigationAgent
 class FakeControl:
     def __init__(self):
         self.incident_id = uuid4()
-        self.updated = None
+        self.updated: tuple[Any, ...] | None = None
 
     def get_incident(self, incident_id):
         if incident_id != self.incident_id:
@@ -29,7 +30,7 @@ class FakeControl:
 
 class FakeDataHub:
     def __init__(self):
-        self.saved = None
+        self.saved: tuple[str, str, list[str]] | None = None
 
     async def collect_context(self, model_urn, max_hops):
         assert model_urn == "urn:li:mlModel:fraud-v2"
@@ -75,6 +76,7 @@ async def test_investigation_maps_lineage_and_updates_incident():
 
     assert result["status"] == "lineage_mapped"
     assert result["lineage"]["upstream"][0]["name"] == "features"
+    assert control.updated is not None
     assert control.updated[0] == control.incident_id
     assert control.updated[2]["root_cause_status"] == "lineage_mapped"
 

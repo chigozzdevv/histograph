@@ -1,12 +1,25 @@
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID
 
-from histograph.integrations.datahub.client import DataHubMcpClient
-from histograph.storage.postgres import PostgresStore
+
+class InvestigationControl(Protocol):
+    def get_incident(self, incident_id: UUID) -> dict[str, Any] | None: ...
+
+    def update_incident(
+        self, incident_id: UUID, summary: str, evidence: dict[str, Any]
+    ) -> bool: ...
+
+
+class InvestigationDataHub(Protocol):
+    async def collect_context(self, model_urn: str, max_hops: int) -> dict[str, Any]: ...
+
+    async def save_investigation(
+        self, title: str, content: str, related_assets: list[str]
+    ) -> dict[str, Any]: ...
 
 
 class InvestigationAgent:
-    def __init__(self, control: PostgresStore, datahub: DataHubMcpClient):
+    def __init__(self, control: InvestigationControl, datahub: InvestigationDataHub):
         self._control = control
         self._datahub = datahub
 

@@ -16,6 +16,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx>=0.28.1,<0.29",
+    "pyrefly>=1.2.0,<2",
     "pytest>=8.4.1,<9",
     "pytest-asyncio>=1.1.0,<2",
     "ruff>=0.12.10,<0.13",
@@ -25,6 +26,9 @@ dev = [
 pythonpath = ["server/src"]
 testpaths = ["server/tests"]
 addopts = "-q"
+
+[tool.pyrefly]
+search_path = ["server/src"]
 
 [tool.ruff]
 line-length = 100
