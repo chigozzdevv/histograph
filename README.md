@@ -9,7 +9,7 @@ The first implementation slice is the headless telemetry and detection core. It 
 The repository compose file starts the Histograph dependencies without touching any other Docker project:
 
 ```bash
-docker compose up -d postgres clickhouse redis
+./scripts/compose.sh up -d postgres clickhouse redis
 ```
 
 Install the Python environment and run the checks:
@@ -32,7 +32,7 @@ Run the API after the services are healthy:
 uv run uvicorn histograph.api.main:app --app-dir server/src --reload
 ```
 
-The API is available at `http://localhost:8000`. Its first startup creates the Postgres control-plane tables and ClickHouse telemetry tables.
+The API is available at `http://localhost:8000`. Startup applies checksummed Postgres and ClickHouse migrations before accepting traffic.
 
 The headless flow is:
 
