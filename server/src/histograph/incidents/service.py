@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from histograph.contracts.events import MonitorEvent
+from histograph.monitors.types import MonitorEvent
 from histograph.storage.postgres import PostgresStore
 
 

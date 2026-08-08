@@ -4,10 +4,10 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from histograph.contracts.events import Monitor
 from histograph.core.time import utc_now
 from histograph.detection.engine import DetectionEngine
 from histograph.incidents.service import IncidentService
+from histograph.monitors.types import Monitor
 
 router = APIRouter(prefix="/v1/detection", tags=["detection"])
 

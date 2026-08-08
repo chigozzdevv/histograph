@@ -1,4 +1,4 @@
-from histograph.contracts.metrics import calculate_binary_metrics, population_stability_index
+from histograph.detection.statistics import calculate_binary_metrics, population_stability_index
 
 
 def test_binary_metrics_are_calculated_from_prediction_outcome_pairs() -> None:

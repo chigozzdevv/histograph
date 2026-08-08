@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Request, status
 from pydantic import BaseModel
 
-from histograph.contracts.events import Actual, Deployment, Prediction
+from histograph.actuals.types import Actual
+from histograph.deployments.types import Deployment
+from histograph.telemetry.types import Prediction
 
 router = APIRouter(prefix="/v1/events", tags=["events"])
 

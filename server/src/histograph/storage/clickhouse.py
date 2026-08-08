@@ -3,7 +3,8 @@ from datetime import datetime
 
 import clickhouse_connect
 
-from histograph.contracts.events import Actual, Prediction
+from histograph.actuals.types import Actual
+from histograph.telemetry.types import Prediction
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS {database}.predictions (

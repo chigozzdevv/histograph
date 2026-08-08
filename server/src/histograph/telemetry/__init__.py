@@ -1,0 +1,1 @@
+"""Prediction telemetry domain."""

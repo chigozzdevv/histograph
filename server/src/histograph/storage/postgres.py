@@ -7,8 +7,9 @@ from psycopg import Connection, connect
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from histograph.contracts.events import Deployment, Monitor, MonitorEvent
 from histograph.core.time import utc_now
+from histograph.deployments.types import Deployment
+from histograph.monitors.types import Monitor, MonitorEvent
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS deployments (

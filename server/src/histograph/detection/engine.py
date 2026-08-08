@@ -3,13 +3,13 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from histograph.contracts.events import Monitor, MonitorEvent
-from histograph.contracts.metrics import (
+from histograph.core.time import ensure_utc
+from histograph.detection.statistics import (
     BinaryMetrics,
     calculate_binary_metrics,
     population_stability_index,
 )
-from histograph.core.time import ensure_utc
+from histograph.monitors.types import Monitor, MonitorEvent
 from histograph.storage.clickhouse import ClickHouseStore
 
 

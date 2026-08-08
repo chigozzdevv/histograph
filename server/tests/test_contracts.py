@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from histograph.contracts.events import Prediction
+from histograph.telemetry.types import Prediction
 
 
 def test_prediction_normalizes_naive_timestamp_to_utc() -> None:

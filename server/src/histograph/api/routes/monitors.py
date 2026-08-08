@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from histograph.contracts.events import Monitor
+from histograph.monitors.types import Monitor
 
 router = APIRouter(prefix="/v1/monitors", tags=["monitors"])
 
