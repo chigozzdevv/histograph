@@ -2,22 +2,29 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from histograph.actuals.repository import ActualRepository
+from histograph.actuals.service import ActualService
 from histograph.api.routes import (
+    actuals,
+    deployments,
     detection,
-    events,
     health,
     incidents,
     investigations,
     models,
     monitors,
+    predictions,
 )
 from histograph.deployments.repository import DeploymentRepository
+from histograph.deployments.service import DeploymentService
 from histograph.incidents.repository import IncidentRepository
 from histograph.models.repository import ModelRepository
 from histograph.monitors.repository import MonitorRepository
 from histograph.settings import Settings, get_settings
-from histograph.storage.clickhouse import ClickHouseStore
+from histograph.storage.clickhouse import ClickHouseDatabase
 from histograph.storage.postgres import PostgresDatabase
+from histograph.telemetry.repository import TelemetryRepository
+from histograph.telemetry.service import TelemetryService
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -27,31 +34,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     monitors_repository = MonitorRepository(database)
     incidents_repository = IncidentRepository(database)
     models_repository = ModelRepository(database)
-    telemetry = ClickHouseStore(
+    clickhouse = ClickHouseDatabase(
         host=resolved_settings.clickhouse_host,
         port=resolved_settings.clickhouse_port,
         database=resolved_settings.clickhouse_database,
         user=resolved_settings.clickhouse_user,
         password=resolved_settings.clickhouse_password,
     )
+    telemetry_repository = TelemetryRepository(clickhouse)
+    actuals_repository = ActualRepository(clickhouse)
+    predictions_service = TelemetryService(telemetry_repository)
+    actuals_service = ActualService(actuals_repository)
+    deployment_service = DeploymentService(deployments_repository)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         database.initialize()
-        telemetry.initialize()
+        clickhouse.initialize()
+        telemetry_repository.initialize()
+        actuals_repository.initialize()
         yield
-        telemetry.close()
+        clickhouse.close()
 
     app = FastAPI(title=resolved_settings.app_name, lifespan=lifespan)
     app.state.settings = resolved_settings
     app.state.database = database
     app.state.deployments = deployments_repository
+    app.state.deployment_ingestion = deployment_service
     app.state.monitors = monitors_repository
     app.state.incidents = incidents_repository
     app.state.models = models_repository
-    app.state.telemetry = telemetry
+    app.state.clickhouse = clickhouse
+    app.state.telemetry = telemetry_repository
+    app.state.predictions = predictions_service
+    app.state.actuals = actuals_service
     app.include_router(health.router)
-    app.include_router(events.router)
+    app.include_router(predictions.router)
+    app.include_router(actuals.router)
+    app.include_router(deployments.router)
     app.include_router(models.router)
     app.include_router(monitors.router)
     app.include_router(detection.router)

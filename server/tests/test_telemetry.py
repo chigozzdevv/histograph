@@ -1,4 +1,4 @@
-from histograph.storage.clickhouse import _scalars_equal
+from histograph.telemetry.repository import _scalars_equal
 
 
 def test_actual_comparison_does_not_coerce_strings_to_booleans() -> None:
