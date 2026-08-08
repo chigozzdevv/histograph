@@ -114,7 +114,7 @@ class TelemetryRepository:
             WITH prediction_window AS (
                 SELECT
                     prediction_id,
-                    argMax(predicted_class, observed_at) AS predicted_class,
+                    argMax(predicted_class, observed_at) AS latest_predicted_class,
                     max(observed_at) AS prediction_observed_at
                 FROM {self._database.name}.predictions
                 WHERE model = %(model)s
@@ -129,7 +129,7 @@ class TelemetryRepository:
                 WHERE observed_at < %(end)s
                 GROUP BY prediction_id
             )
-            SELECT p.predicted_class, a.actual
+            SELECT p.latest_predicted_class, a.actual
             FROM prediction_window AS p
             INNER JOIN actual_window AS a USING (prediction_id)
             ORDER BY p.prediction_observed_at

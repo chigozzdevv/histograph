@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: histograph
+          POSTGRES_USER: histograph
+          POSTGRES_PASSWORD: histograph
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U histograph -d histograph"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      clickhouse:
+        image: clickhouse/clickhouse-server:25.7-alpine
+        env:
+          CLICKHOUSE_DB: histograph
+          CLICKHOUSE_USER: histograph
+          CLICKHOUSE_PASSWORD: histograph
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+        ports:
+          - 8124:8123
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      HISTOGRAPH_RUN_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --locked --dev
+      - run: ./scripts/check.sh

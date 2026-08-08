@@ -20,6 +20,12 @@ uv run ruff check server/src server/tests
 uv run pytest
 ```
 
+With Postgres and ClickHouse running, execute the database-backed API flow as well:
+
+```bash
+HISTOGRAPH_RUN_INTEGRATION=1 uv run pytest server/tests/integration
+```
+
 Run the API after the services are healthy:
 
 ```bash

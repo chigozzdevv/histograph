@@ -52,7 +52,7 @@ class DeploymentRepository:
                         FROM deployments
                         WHERE model = %s
                           AND environment = %s
-                          AND (%s IS NULL OR deployment = %s)
+                          AND (%s::text IS NULL OR deployment = %s::text)
                         ORDER BY deployment, version, occurred_at DESC, created_at DESC
                     )
                     SELECT *
