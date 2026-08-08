@@ -19,10 +19,10 @@ class InvestigationRequest(BaseModel):
 async def investigate_incident(
     incident_id: UUID, request_body: InvestigationRequest, request: Request
 ) -> dict[str, object]:
-    if request.app.state.control.get_incident(incident_id) is None:
+    if request.app.state.incidents.get(incident_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
     agent = InvestigationAgent(
-        request.app.state.control,
+        request.app.state.incidents,
         DataHubMcpClient(request.app.state.settings),
     )
     try:

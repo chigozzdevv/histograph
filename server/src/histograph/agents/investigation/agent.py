@@ -3,11 +3,9 @@ from uuid import UUID
 
 
 class InvestigationControl(Protocol):
-    def get_incident(self, incident_id: UUID) -> dict[str, Any] | None: ...
+    def get(self, incident_id: UUID) -> dict[str, Any] | None: ...
 
-    def update_incident(
-        self, incident_id: UUID, summary: str, evidence: dict[str, Any]
-    ) -> bool: ...
+    def update(self, incident_id: UUID, summary: str, evidence: dict[str, Any]) -> bool: ...
 
 
 class InvestigationDataHub(Protocol):
@@ -30,7 +28,7 @@ class InvestigationAgent:
         max_hops: int = 3,
         write_back: bool = False,
     ) -> dict[str, Any]:
-        incident = self._control.get_incident(incident_id)
+        incident = self._control.get(incident_id)
         if incident is None:
             raise LookupError("Incident not found")
 
@@ -55,7 +53,7 @@ class InvestigationAgent:
                 "writeback": writeback,
             },
         }
-        self._control.update_incident(incident_id, report["summary"], evidence)
+        self._control.update(incident_id, report["summary"], evidence)
         return {"incident_id": incident_id, **report, "writeback": writeback}
 
 

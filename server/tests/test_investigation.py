@@ -11,7 +11,7 @@ class FakeControl:
         self.incident_id = uuid4()
         self.updated: tuple[Any, ...] | None = None
 
-    def get_incident(self, incident_id):
+    def get(self, incident_id):
         if incident_id != self.incident_id:
             return None
         return {
@@ -23,7 +23,7 @@ class FakeControl:
             "evidence": {"detection": {"feature": "merchant_velocity", "psi": 0.42}},
         }
 
-    def update_incident(self, incident_id, summary, evidence):
+    def update(self, incident_id, summary, evidence):
         self.updated = (incident_id, summary, evidence)
         return True
 

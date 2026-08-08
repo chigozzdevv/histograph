@@ -27,5 +27,5 @@ def ingest_actual(event: Actual, request: Request) -> AcceptedEvent:
 
 @router.post("/deployments", response_model=AcceptedEvent, status_code=status.HTTP_202_ACCEPTED)
 def ingest_deployment(event: Deployment, request: Request) -> AcceptedEvent:
-    request.app.state.control.save_deployment(event)
+    request.app.state.deployments.save(event)
     return AcceptedEvent(event_type="deployment")

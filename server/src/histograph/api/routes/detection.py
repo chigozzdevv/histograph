@@ -22,7 +22,7 @@ class PerformanceCheck(BaseModel):
 
 
 def _monitor(request: Request, monitor_id: UUID) -> Monitor:
-    record = request.app.state.control.get_monitor(monitor_id)
+    record = request.app.state.monitors.get(monitor_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Monitor not found")
     return Monitor(
@@ -52,7 +52,7 @@ def check_feature_drift(
     )
     incident_id = None
     if event is not None:
-        incident_id = IncidentService(request.app.state.control).create_from_monitor_event(
+        incident_id = IncidentService(request.app.state.incidents).create_from_monitor_event(
             event, result.evidence
         )
     return {
@@ -81,7 +81,7 @@ def check_performance(
     )
     incident_id = None
     if event is not None:
-        incident_id = IncidentService(request.app.state.control).create_from_monitor_event(
+        incident_id = IncidentService(request.app.state.incidents).create_from_monitor_event(
             event, result.evidence
         )
     return {

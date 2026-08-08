@@ -12,7 +12,7 @@ def health() -> dict[str, str]:
 def readiness(request: Request) -> dict[str, object]:
     checks: dict[str, str] = {}
     for name, store in (
-        ("postgres", request.app.state.control),
+        ("postgres", request.app.state.database),
         ("clickhouse", request.app.state.telemetry),
     ):
         try:

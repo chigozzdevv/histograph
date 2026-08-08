@@ -1,13 +1,13 @@
 from typing import Any
 from uuid import UUID
 
+from histograph.incidents.repository import IncidentRepository
 from histograph.monitors.types import MonitorEvent
-from histograph.storage.postgres import PostgresStore
 
 
 class IncidentService:
-    def __init__(self, control: PostgresStore):
-        self._control = control
+    def __init__(self, repository: IncidentRepository):
+        self._repository = repository
 
     def create_from_monitor_event(
         self, event: MonitorEvent, detection_evidence: dict[str, Any]
@@ -27,4 +27,4 @@ class IncidentService:
             "hypotheses": [],
             "datahub": {"status": "pending_investigation"},
         }
-        return self._control.create_incident(event, summary, evidence)
+        return self._repository.create(event, summary, evidence)
