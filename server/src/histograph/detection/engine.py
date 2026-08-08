@@ -99,7 +99,7 @@ class DetectionEngine:
         observed = population_stability_index(baseline, current) if sufficient_data else None
         result = DetectionResult(
             status="evaluated" if sufficient_data else "insufficient_data",
-            triggered=bool(
+            triggered=(
                 sufficient_data
                 and observed is not None
                 and _matches(monitor.operator, observed, monitor.threshold, 0.0)
