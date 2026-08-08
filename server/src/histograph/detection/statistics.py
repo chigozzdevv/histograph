@@ -59,14 +59,10 @@ def calculate_binary_metrics(
         recall=recall,
         f1=f1,
         false_positive_rate=(
-            false_positives / false_positive_denominator
-            if false_positive_denominator
-            else None
+            false_positives / false_positive_denominator if false_positive_denominator else None
         ),
         false_negative_rate=(
-            false_negatives / false_negative_denominator
-            if false_negative_denominator
-            else None
+            false_negatives / false_negative_denominator if false_negative_denominator else None
         ),
         accuracy=((true_positives + true_negatives) / count if count else None),
     )

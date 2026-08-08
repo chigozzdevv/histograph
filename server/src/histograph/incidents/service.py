@@ -6,9 +6,7 @@ from histograph.monitors.types import MonitorEvent
 
 
 class IncidentStore(Protocol):
-    def create(
-        self, event: MonitorEvent, summary: str, evidence: dict[str, Any]
-    ) -> UUID: ...
+    def create(self, event: MonitorEvent, summary: str, evidence: dict[str, Any]) -> UUID: ...
 
     def get(self, incident_id: UUID) -> dict[str, Any] | None: ...
 
@@ -25,9 +23,7 @@ class IncidentService:
         self, event: MonitorEvent, detection_evidence: dict[str, Any]
     ) -> UUID:
         observed = event.observed_value
-        baseline = (
-            "unavailable" if event.baseline_value is None else f"{event.baseline_value:.6f}"
-        )
+        baseline = "unavailable" if event.baseline_value is None else f"{event.baseline_value:.6f}"
         summary = (
             f"{event.metric} crossed its threshold for {event.model} {event.version}: "
             f"observed {observed:.6f}, baseline {baseline}, threshold {event.threshold:.6f}."

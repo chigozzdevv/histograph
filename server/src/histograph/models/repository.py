@@ -43,6 +43,4 @@ class ModelRepository:
 
     def get(self, name: str) -> dict[str, Any] | None:
         with self._database.connection() as connection:
-            return connection.execute(
-                "SELECT * FROM models WHERE name = %s", (name,)
-            ).fetchone()
+            return connection.execute("SELECT * FROM models WHERE name = %s", (name,)).fetchone()

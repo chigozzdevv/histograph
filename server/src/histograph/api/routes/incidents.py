@@ -31,9 +31,7 @@ def transition_incident(
     request: Request,
 ) -> dict[str, object]:
     try:
-        incident = IncidentService(request.app.state.incidents).transition(
-            incident_id, transition
-        )
+        incident = IncidentService(request.app.state.incidents).transition(incident_id, transition)
     except ValueError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

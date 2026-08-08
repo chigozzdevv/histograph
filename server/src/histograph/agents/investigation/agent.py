@@ -65,11 +65,7 @@ def _build_report(
     model_entities = _entity_summaries(context.get("model"))
     related = _entity_summaries(context.get("related_entities"))
     owners = sorted(
-        {
-            owner
-            for entity in [*model_entities, *related]
-            for owner in entity.get("owners", [])
-        }
+        {owner for entity in [*model_entities, *related] for owner in entity.get("owners", [])}
     )
     detection = (incident.get("evidence") or {}).get("detection", {})
     metric = incident.get("metric", "signal")
@@ -266,7 +262,6 @@ def _as_markdown(report: dict[str, Any]) -> str:
         )
         if hypothesis["evidence_urns"]:
             lines.append(
-                "  - Evidence: "
-                + ", ".join(f"`{urn}`" for urn in hypothesis["evidence_urns"])
+                "  - Evidence: " + ", ".join(f"`{urn}`" for urn in hypothesis["evidence_urns"])
             )
     return "\n".join(lines)

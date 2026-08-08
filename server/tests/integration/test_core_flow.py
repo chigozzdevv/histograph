@@ -27,9 +27,7 @@ def integration_settings() -> Generator[Settings]:
         connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(postgres_database)))
 
     settings = Settings(
-        postgres_dsn=(
-            f"postgresql://histograph:histograph@localhost:5433/{postgres_database}"
-        ),
+        postgres_dsn=(f"postgresql://histograph:histograph@localhost:5433/{postgres_database}"),
         clickhouse_database=clickhouse_database,
     )
     try:

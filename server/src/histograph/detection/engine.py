@@ -124,9 +124,7 @@ class DetectionEngine:
             },
         )
         event = (
-            self._event_from_result(monitor_id, monitor, result, end)
-            if result.triggered
-            else None
+            self._event_from_result(monitor_id, monitor, result, end) if result.triggered else None
         )
         return result, event
 

@@ -50,9 +50,7 @@ class DataHubMcpClient:
         except Exception as error:
             raise DataHubMcpError(f"DataHub MCP connection failed: {error}") from error
 
-    async def _call(
-        self, session: ClientSession, tool: str, arguments: Mapping[str, Any]
-    ) -> Any:
+    async def _call(self, session: ClientSession, tool: str, arguments: Mapping[str, Any]) -> Any:
         try:
             result = await session.call_tool(tool, arguments=dict(arguments))
         except Exception as error:

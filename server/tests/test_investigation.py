@@ -48,8 +48,7 @@ class FakeDataHub:
                             "degree": 1,
                             "entity": {
                                 "urn": (
-                                    "urn:li:dataset:"
-                                    "(urn:li:dataPlatform:postgres,features,PROD)"
+                                    "urn:li:dataset:(urn:li:dataPlatform:postgres,features,PROD)"
                                 ),
                                 "type": "DATASET",
                                 "name": "features",
@@ -58,9 +57,7 @@ class FakeDataHub:
                                         {
                                             "owner": {
                                                 "urn": "urn:li:corpuser:risk-data",
-                                                "properties": {
-                                                    "displayName": "Risk Data Platform"
-                                                },
+                                                "properties": {"displayName": "Risk Data Platform"},
                                             }
                                         }
                                     ]
