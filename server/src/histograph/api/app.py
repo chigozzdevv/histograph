@@ -49,10 +49,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        database.initialize()
-        clickhouse.initialize()
-        telemetry_repository.initialize()
-        actuals_repository.initialize()
+        database.migrate()
+        clickhouse.migrate()
         yield
         clickhouse.close()
 
