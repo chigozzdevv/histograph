@@ -133,8 +133,21 @@ def _build_report(
 def _lineage_entities(payload: Any) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         return []
+
+    search_results: Any = payload.get("searchResults")
+    if search_results is None:
+        for direction in ("upstreams", "downstreams"):
+            direction_payload = payload.get(direction)
+            if isinstance(direction_payload, dict):
+                search_results = direction_payload.get("searchResults")
+                if search_results is not None:
+                    break
+
+    if not isinstance(search_results, list):
+        return []
+
     entities: list[dict[str, Any]] = []
-    for item in payload.get("searchResults", []) or []:
+    for item in search_results:
         if not isinstance(item, dict):
             continue
         entity = item.get("entity")

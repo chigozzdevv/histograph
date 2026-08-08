@@ -42,18 +42,23 @@ class FakeDataHub:
                 "name": "fraud-v2",
             },
             "upstream": {
-                "searchResults": [
-                    {
-                        "degree": 1,
-                        "entity": {
-                            "urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,features,PROD)",
-                            "type": "DATASET",
-                            "name": "features",
-                        },
-                    }
-                ]
+                "upstreams": {
+                    "searchResults": [
+                        {
+                            "degree": 1,
+                            "entity": {
+                                "urn": (
+                                    "urn:li:dataset:"
+                                    "(urn:li:dataPlatform:postgres,features,PROD)"
+                                ),
+                                "type": "DATASET",
+                                "name": "features",
+                            },
+                        }
+                    ]
+                }
             },
-            "downstream": {"searchResults": []},
+            "downstream": {"downstreams": {"searchResults": []}},
             "related_entities": [],
             "tool_trace": ["get_entities", "get_lineage:upstream", "get_lineage:downstream"],
         }
