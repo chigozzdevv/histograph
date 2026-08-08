@@ -5,6 +5,7 @@ import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 
 from histograph.actuals.types import Actual
+from histograph.models.types import JsonScalar
 from histograph.telemetry.types import Prediction
 
 SCHEMA = """
@@ -123,14 +124,14 @@ class ClickHouseStore:
     ) -> list[float]:
         result = self._connect().query(
             f"""
-            SELECT JSONExtractFloat(features_json, %(feature)s)
+            SELECT argMax(features_json, observed_at)
             FROM {self._database}.predictions
             WHERE model = %(model)s
               AND version = %(version)s
               AND observed_at >= %(start)s
               AND observed_at < %(end)s
               AND JSONHas(features_json, %(feature)s)
-            ORDER BY observed_at
+            GROUP BY prediction_id
             """,
             parameters={
                 "feature": feature,
@@ -140,7 +141,12 @@ class ClickHouseStore:
                 "end": end,
             },
         )
-        return [float(row[0]) for row in result.result_rows if row[0] is not None]
+        values: list[float] = []
+        for (features_json,) in result.result_rows:
+            feature_value = json.loads(features_json).get(feature)
+            if isinstance(feature_value, int | float) and not isinstance(feature_value, bool):
+                values.append(float(feature_value))
+        return values
 
     def binary_pairs(
         self,
@@ -148,29 +154,55 @@ class ClickHouseStore:
         version: str,
         start: datetime,
         end: datetime,
+        positive_class: str,
+        positive_actual: JsonScalar,
     ) -> list[tuple[bool, bool]]:
         result = self._connect().query(
             f"""
+            WITH prediction_window AS (
+                SELECT
+                    prediction_id,
+                    argMax(predicted_class, observed_at) AS predicted_class,
+                    max(observed_at) AS prediction_observed_at
+                FROM {self._database}.predictions
+                WHERE model = %(model)s
+                  AND version = %(version)s
+                  AND observed_at >= %(start)s
+                  AND observed_at < %(end)s
+                  AND predicted_class IS NOT NULL
+                GROUP BY prediction_id
+            ), actual_window AS (
+                SELECT prediction_id, argMax(actual, observed_at) AS actual
+                FROM {self._database}.actuals
+                WHERE observed_at < %(end)s
+                GROUP BY prediction_id
+            )
             SELECT p.predicted_class, a.actual
-            FROM {self._database}.predictions AS p
-            INNER JOIN {self._database}.actuals AS a
-                ON p.prediction_id = a.prediction_id
-            WHERE p.model = %(model)s
-              AND p.version = %(version)s
-              AND p.observed_at >= %(start)s
-              AND p.observed_at < %(end)s
-            ORDER BY p.observed_at
+            FROM prediction_window AS p
+            INNER JOIN actual_window AS a USING (prediction_id)
+            ORDER BY p.prediction_observed_at
             """,
             parameters={"model": model, "version": version, "start": start, "end": end},
         )
         pairs: list[tuple[bool, bool]] = []
         for predicted_class, actual_json in result.result_rows:
-            predicted = predicted_class == "fraud"
             actual = json.loads(actual_json)
-            pairs.append((predicted, bool(actual)))
+            if actual is None:
+                continue
+            predicted = predicted_class == positive_class
+            actual_is_positive = _scalars_equal(actual, positive_actual)
+            pairs.append((predicted, actual_is_positive))
         return pairs
 
     def close(self) -> None:
         if self._client is not None:
             self._client.close()
             self._client = None
+
+
+def _scalars_equal(left: object, right: JsonScalar) -> bool:
+    if isinstance(left, bool) or isinstance(right, bool):
+        return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if isinstance(left, int | float) and isinstance(right, int | float):
+        return float(left) == float(right)
+    return type(left) is type(right) and left == right

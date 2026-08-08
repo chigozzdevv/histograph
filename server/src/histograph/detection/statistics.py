@@ -1,3 +1,4 @@
+from bisect import bisect_right
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import log
@@ -13,7 +14,9 @@ class BinaryMetrics:
     true_negatives: int
     precision: float | None
     recall: float | None
+    f1: float | None
     false_positive_rate: float | None
+    false_negative_rate: float | None
     accuracy: float | None
 
 
@@ -36,6 +39,14 @@ def calculate_binary_metrics(
     precision_denominator = true_positives + false_positives
     recall_denominator = true_positives + false_negatives
     false_positive_denominator = false_positives + true_negatives
+    false_negative_denominator = false_negatives + true_positives
+    precision = true_positives / precision_denominator if precision_denominator else None
+    recall = true_positives / recall_denominator if recall_denominator else None
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision is not None and recall is not None and precision + recall
+        else None
+    )
 
     return BinaryMetrics(
         count=count,
@@ -44,11 +55,17 @@ def calculate_binary_metrics(
         false_positives=false_positives,
         false_negatives=false_negatives,
         true_negatives=true_negatives,
-        precision=(true_positives / precision_denominator if precision_denominator else None),
-        recall=(true_positives / recall_denominator if recall_denominator else None),
+        precision=precision,
+        recall=recall,
+        f1=f1,
         false_positive_rate=(
             false_positives / false_positive_denominator
             if false_positive_denominator
+            else None
+        ),
+        false_negative_rate=(
+            false_negatives / false_negative_denominator
+            if false_negative_denominator
             else None
         ),
         accuracy=((true_positives + true_negatives) / count if count else None),
@@ -65,24 +82,26 @@ def population_stability_index(
     if bins < 2:
         raise ValueError("bins must be at least 2")
 
-    lower = min(min(baseline_values), min(current_values))
-    upper = max(max(baseline_values), max(current_values))
-    if lower == upper:
+    ordered_baseline = sorted(baseline_values)
+    if ordered_baseline[0] == ordered_baseline[-1] and all(
+        value == ordered_baseline[0] for value in current_values
+    ):
         return 0.0
 
-    width = (upper - lower) / bins
-    baseline_counts = [0] * bins
-    current_counts = [0] * bins
-
-    def index(value: float) -> int:
-        if value == upper:
-            return bins - 1
-        return min(bins - 1, max(0, int((value - lower) / width)))
+    boundaries = sorted(
+        {
+            ordered_baseline[min(len(ordered_baseline) - 1, index * len(ordered_baseline) // bins)]
+            for index in range(1, bins)
+        }
+    )
+    bucket_count = len(boundaries) + 1
+    baseline_counts = [0] * bucket_count
+    current_counts = [0] * bucket_count
 
     for value in baseline_values:
-        baseline_counts[index(value)] += 1
+        baseline_counts[bisect_right(boundaries, value)] += 1
     for value in current_values:
-        current_counts[index(value)] += 1
+        current_counts[bisect_right(boundaries, value)] += 1
 
     baseline_size = len(baseline_values)
     current_size = len(current_values)

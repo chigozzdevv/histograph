@@ -14,7 +14,9 @@ def test_binary_metrics_are_calculated_from_prediction_outcome_pairs() -> None:
     assert metrics.count == 4
     assert metrics.precision == 0.5
     assert metrics.recall == 0.5
+    assert metrics.f1 == 0.5
     assert metrics.false_positive_rate == 0.5
+    assert metrics.false_negative_rate == 0.5
     assert metrics.accuracy == 0.5
 
 

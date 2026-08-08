@@ -2,9 +2,18 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from histograph.api.routes import detection, events, health, incidents, investigations, monitors
+from histograph.api.routes import (
+    detection,
+    events,
+    health,
+    incidents,
+    investigations,
+    models,
+    monitors,
+)
 from histograph.deployments.repository import DeploymentRepository
 from histograph.incidents.repository import IncidentRepository
+from histograph.models.repository import ModelRepository
 from histograph.monitors.repository import MonitorRepository
 from histograph.settings import Settings, get_settings
 from histograph.storage.clickhouse import ClickHouseStore
@@ -17,6 +26,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     deployments_repository = DeploymentRepository(database)
     monitors_repository = MonitorRepository(database)
     incidents_repository = IncidentRepository(database)
+    models_repository = ModelRepository(database)
     telemetry = ClickHouseStore(
         host=resolved_settings.clickhouse_host,
         port=resolved_settings.clickhouse_port,
@@ -38,9 +48,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.deployments = deployments_repository
     app.state.monitors = monitors_repository
     app.state.incidents = incidents_repository
+    app.state.models = models_repository
     app.state.telemetry = telemetry
     app.include_router(health.router)
     app.include_router(events.router)
+    app.include_router(models.router)
     app.include_router(monitors.router)
     app.include_router(detection.router)
     app.include_router(incidents.router)

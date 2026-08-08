@@ -9,6 +9,11 @@ router = APIRouter(prefix="/v1/monitors", tags=["monitors"])
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_monitor(monitor: Monitor, request: Request) -> dict[str, object]:
+    if request.app.state.models.get(monitor.model) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Register the model before creating a monitor",
+        )
     monitor_id = request.app.state.monitors.save(monitor)
     return {"id": monitor_id, "monitor": monitor.model_dump(mode="json")}
 

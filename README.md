@@ -30,9 +30,18 @@ The API is available at `http://localhost:8000`. Its first startup creates the P
 
 The headless flow is:
 
-1. Send predictions, outcomes, or deployment events to `/v1/events`.
-2. Create a monitor at `/v1/monitors` and run its detection endpoint.
-3. Investigate a triggered incident at `/v1/investigations/{incident_id}` with its DataHub model URN.
+1. Register the model and its binary-class semantics at `/v1/models/{model_name}`.
+2. Send predictions, outcomes, or deployment events to `/v1/events`.
+3. Create a versioned monitor at `/v1/monitors`, or report deployment state so Histograph can
+   resolve a monitor without an explicit version.
+4. Run the monitor's detection endpoint.
+5. Investigate a triggered incident at `/v1/investigations/{incident_id}` with its DataHub model
+   URN.
+
+The implemented performance evaluator supports binary classification with an explicit positive
+prediction class and actual-outcome value. The implemented drift evaluator supports numeric-feature
+PSI. Monitor creation rejects signal and metric combinations that are not implemented yet, and each
+monitor requires a minimum sample size before it can trigger an incident.
 
 An investigation reads the model entity and both directions of its DataHub lineage through MCP, records the exact tool trace and lineage evidence on the incident, and keeps the incident open until a dependency change is corroborated. Set `HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED=true` and pass `write_back: true` only when the team has approved saving the investigation as a DataHub analysis document.
 

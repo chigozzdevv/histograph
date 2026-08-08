@@ -15,20 +15,24 @@ class MonitorRepository:
             connection.execute(
                 """
                 INSERT INTO monitors (
-                    id, model, version, signal, metric, operator, threshold,
-                    baseline_window_minutes, evaluation_window_minutes, enabled
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    id, model, version, environment, deployment, signal, metric,
+                    operator, threshold, baseline_window_minutes,
+                    evaluation_window_minutes, minimum_sample_size, enabled
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     monitor_id,
                     monitor.model,
                     monitor.version,
+                    monitor.environment,
+                    monitor.deployment,
                     monitor.signal,
                     monitor.metric,
                     monitor.operator,
                     monitor.threshold,
                     monitor.baseline_window_minutes,
                     monitor.evaluation_window_minutes,
+                    monitor.minimum_sample_size,
                     monitor.enabled,
                 ),
             )

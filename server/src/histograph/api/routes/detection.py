@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from histograph.core.time import utc_now
 from histograph.detection.engine import DetectionEngine
 from histograph.incidents.service import IncidentService
+from histograph.models.types import ModelDefinition
 from histograph.monitors.types import Monitor
 
 router = APIRouter(prefix="/v1/detection", tags=["detection"])
@@ -25,16 +26,60 @@ def _monitor(request: Request, monitor_id: UUID) -> Monitor:
     record = request.app.state.monitors.get(monitor_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Monitor not found")
-    return Monitor(
+    monitor = Monitor(
         model=record["model"],
         version=record["version"],
+        environment=record["environment"],
+        deployment=record["deployment"],
         signal=record["signal"],
         metric=record["metric"],
         operator=record["operator"],
         threshold=record["threshold"],
         baseline_window_minutes=record["baseline_window_minutes"],
         evaluation_window_minutes=record["evaluation_window_minutes"],
+        minimum_sample_size=record["minimum_sample_size"],
         enabled=record["enabled"],
+    )
+    if not monitor.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Monitor is disabled",
+        )
+    if monitor.version is not None:
+        return monitor
+
+    active_versions = request.app.state.deployments.active_versions(
+        monitor.model,
+        environment=monitor.environment,
+        deployment=monitor.deployment,
+    )
+    versions = sorted({record["version"] for record in active_versions})
+    if not versions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No active deployment version found; set an explicit monitor version",
+        )
+    if len(versions) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Multiple active versions found; set an explicit monitor version",
+        )
+    return monitor.model_copy(update={"version": versions[0]})
+
+
+def _model(request: Request, name: str) -> ModelDefinition:
+    record = request.app.state.models.get(name)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Registered model definition not found",
+        )
+    return ModelDefinition(
+        name=record["name"],
+        task=record["task"],
+        positive_class=record["positive_class"],
+        positive_actual=record["positive_actual"],
+        datahub_urn=record["datahub_urn"],
     )
 
 
@@ -56,6 +101,7 @@ def check_feature_drift(
             event, result.evidence
         )
     return {
+        "status": result.status,
         "triggered": result.triggered,
         "incident_id": incident_id,
         "metric": result.metric,
@@ -77,7 +123,10 @@ def check_performance(
     if monitor.signal != "performance":
         raise HTTPException(status_code=422, detail="Monitor is not configured for performance")
     result, event = DetectionEngine(request.app.state.telemetry).evaluate_performance(
-        monitor_id, monitor, request_body.as_of or utc_now()
+        monitor_id,
+        monitor,
+        _model(request, monitor.model),
+        request_body.as_of or utc_now(),
     )
     incident_id = None
     if event is not None:
@@ -85,6 +134,7 @@ def check_performance(
             event, result.evidence
         )
     return {
+        "status": result.status,
         "triggered": result.triggered,
         "incident_id": incident_id,
         "metric": result.metric,
