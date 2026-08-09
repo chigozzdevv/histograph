@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from psycopg.types.json import Jsonb
 
 from histograph.core.time import utc_now
+from histograph.incidents.types import RecoveryVerification
 from histograph.monitors.types import MonitorEvent
 from histograph.storage.postgres import PostgresDatabase
 
@@ -125,6 +126,36 @@ class IncidentRepository:
             )
             connection.commit()
             return updated
+
+    def record_recovery(
+        self,
+        incident_id: UUID,
+        recovery: RecoveryVerification,
+    ) -> dict[str, Any] | None:
+        with self._database.connection() as connection:
+            current = connection.execute(
+                "SELECT * FROM incidents WHERE id = %s FOR UPDATE", (incident_id,)
+            ).fetchone()
+            if current is None:
+                return None
+            evidence = current.get("evidence")
+            updated_evidence = {
+                **(evidence if isinstance(evidence, dict) else {}),
+                "recovery": recovery.model_dump(mode="json"),
+            }
+            connection.execute(
+                "UPDATE incidents SET evidence = %s WHERE id = %s",
+                (Jsonb(updated_evidence), incident_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO incident_events (id, incident_id, event_type, details)
+                VALUES (%s, %s, 'recovery_verified', %s)
+                """,
+                (uuid4(), incident_id, Jsonb(recovery.model_dump(mode="json"))),
+            )
+            connection.commit()
+            return {**current, "evidence": updated_evidence}
 
     def events(self, incident_id: UUID) -> list[dict[str, Any]]:
         with self._database.connection() as connection:

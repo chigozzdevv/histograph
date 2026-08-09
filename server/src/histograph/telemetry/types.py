@@ -24,3 +24,7 @@ class Prediction(EventModel):
     @classmethod
     def normalize_observed_at(cls, value: datetime) -> datetime:
         return ensure_utc(value)
+
+
+class PredictionBatch(EventModel):
+    events: list[Prediction] = Field(min_length=1, max_length=5000)

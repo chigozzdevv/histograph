@@ -15,7 +15,7 @@ class FakeControl:
         self.incident_id = uuid4()
         self.updated: tuple[Any, ...] | None = None
 
-    def get(self, incident_id):
+    def get(self, incident_id) -> dict[str, Any] | None:
         if incident_id != self.incident_id:
             return None
         return {
@@ -133,6 +133,186 @@ async def test_investigation_writeback_is_explicit():
     assert result["writeback"]["urn"] == "urn:li:document:histograph-incident"
     assert datahub.saved is not None
     assert "Histograph investigation" in datahub.saved[0]
+
+
+class FakeRecoveredControl(FakeControl):
+    def get(self, incident_id):
+        incident = super().get(incident_id)
+        if incident is None:
+            return None
+        incident["evidence"]["recovery"] = {
+            "status": "verified",
+            "verified_at": "2026-08-08T12:30:00+00:00",
+            "checks": [
+                {
+                    "name": "fresh_performance_window_passed",
+                    "passed": True,
+                    "details": {"recall": 0.82},
+                }
+            ],
+        }
+        return incident
+
+
+class FakeRecoveredReleaseHistory:
+    def collect(self, incident, asset_urns):
+        feature_urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,features,PROD)"
+        assert feature_urn in asset_urns
+        common = {
+            "asset_urn": feature_urn,
+            "asset_name": "account-velocity-job",
+            "asset_type": "data_job",
+            "metadata": {"changed_features": ["merchant_velocity"]},
+            "lineage_match": True,
+        }
+        return {
+            "changes": [
+                {
+                    **common,
+                    "version": "v2",
+                    "change_type": "configuration",
+                    "status": "applied",
+                    "occurred_at": "2026-08-08T11:00:00+00:00",
+                },
+                {
+                    **common,
+                    "version": "v1",
+                    "change_type": "rollback",
+                    "status": "rolled_back",
+                    "occurred_at": "2026-08-08T12:00:00+00:00",
+                },
+            ],
+            "deployments": [],
+        }
+
+
+@pytest.mark.asyncio
+async def test_final_writeback_includes_verified_recovery_evidence():
+    control = FakeRecoveredControl()
+    datahub = FakeDataHub()
+    agent = InvestigationAgent(control, datahub, FakeRecoveredReleaseHistory())
+
+    result = await agent.investigate(
+        control.incident_id,
+        "urn:li:mlModel:fraud-v2",
+        max_hops=2,
+        write_back=True,
+    )
+
+    assert result["status"] == "confirmed_cause"
+    assert datahub.saved is not None
+    content = datahub.saved[1]
+    assert "## Recovery evidence" in content
+    assert "2026-08-08T12:30:00+00:00" in content
+    assert "fresh_performance_window_passed" in content
+    assert '"recall": 0.82' in content
+
+
+class FakeReleaseHistory:
+    def collect(self, incident, asset_urns):
+        feature_urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,features,PROD)"
+        assert feature_urn in asset_urns
+        return {
+            "window": {
+                "start": "2026-08-08T10:30:00+00:00",
+                "end": "2026-08-08T12:00:00+00:00",
+            },
+            "changes": [
+                {
+                    "asset_urn": feature_urn,
+                    "asset_name": "account-velocity-job",
+                    "asset_type": "data_job",
+                    "version": "v2",
+                    "change_type": "configuration",
+                    "status": "applied",
+                    "occurred_at": "2026-08-08T11:00:00+00:00",
+                    "metadata": {"changed_features": ["merchant_velocity"]},
+                    "lineage_match": True,
+                }
+            ],
+            "deployments": [],
+        }
+
+
+@pytest.mark.asyncio
+async def test_investigation_identifies_a_lineage_matched_feature_release_as_probable():
+    control = FakeControl()
+    agent = InvestigationAgent(control, FakeDataHub(), FakeReleaseHistory())
+
+    result = await agent.investigate(
+        control.incident_id,
+        "urn:li:mlModel:fraud-v2",
+        max_hops=2,
+    )
+
+    assert result["status"] == "probable_cause"
+    assert result["root_cause"]["kind"] == "upstream_release"
+    assert result["root_cause"]["asset_name"] == "account-velocity-job"
+    assert result["hypotheses"][0]["status"] == "supported"
+    assert control.updated is not None
+    assert control.updated[2]["root_cause_status"] == "probable_cause"
+
+
+class FakeNoLineageDataHub(FakeDataHub):
+    async def collect_context(self, model_urn, max_hops):
+        return {
+            "model": {"urn": model_urn, "type": "ML_MODEL", "name": "fraud-v2"},
+            "upstream": {"upstreams": {"searchResults": []}},
+            "downstream": {"downstreams": {"searchResults": []}},
+            "related_entities": [],
+            "tool_trace": ["get_entities"],
+        }
+
+
+class AblationReleaseHistory:
+    def collect(self, incident, asset_urns):
+        feature_urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,features,PROD)"
+        return {
+            "changes": [
+                {
+                    "asset_urn": feature_urn,
+                    "asset_name": "account-velocity-job",
+                    "version": "v2",
+                    "change_type": "configuration",
+                    "status": "applied",
+                    "metadata": {"changed_features": ["merchant_velocity"]},
+                    "lineage_match": feature_urn in asset_urns,
+                }
+            ],
+            "deployments": [],
+        }
+
+
+@pytest.mark.asyncio
+async def test_datahub_enabled_vs_disabled_ablation_changes_the_operational_decision():
+    enabled_control = FakeControl()
+    disabled_control = FakeControl()
+    enabled = InvestigationAgent(
+        enabled_control,
+        FakeDataHub(),
+        AblationReleaseHistory(),
+    )
+    disabled = InvestigationAgent(
+        disabled_control,
+        FakeNoLineageDataHub(),
+        AblationReleaseHistory(),
+    )
+
+    enabled_result = await enabled.investigate(
+        enabled_control.incident_id,
+        "urn:li:mlModel:fraud-v2",
+        max_hops=2,
+    )
+    disabled_result = await disabled.investigate(
+        disabled_control.incident_id,
+        "urn:li:mlModel:fraud-v2",
+        max_hops=2,
+    )
+
+    assert enabled_result["status"] == "probable_cause"
+    assert "request approval to roll back" in enabled_result["recommended_action"]
+    assert disabled_result["status"] == "insufficient_evidence"
+    assert "only approve rollback" in disabled_result["recommended_action"]
 
 
 class FakeModels:

@@ -15,7 +15,7 @@ class Monitor(EventModel):
     deployment: str | None = Field(default=None, max_length=200)
     signal: Literal["performance", "feature_drift"]
     metric: str = Field(min_length=1, max_length=100)
-    operator: Literal["lt", "lte", "gt", "gte", "change"]
+    operator: Literal["lt", "lte", "gt", "gte", "change", "decrease", "increase"]
     threshold: float = Field(description="Threshold in the metric's native unit")
     baseline_window_minutes: int = Field(default=60, ge=1)
     evaluation_window_minutes: int = Field(default=15, ge=1)
@@ -43,6 +43,16 @@ class Monitor(EventModel):
             raise ValueError(
                 f"Binary performance metric must be one of: {', '.join(sorted(supported))}"
             )
+        if self.operator == "decrease" and self.metric in {
+            "false_positive_rate",
+            "false_negative_rate",
+        }:
+            raise ValueError(f"Use the increase operator to detect degradation in {self.metric}")
+        if self.operator == "increase" and self.metric not in {
+            "false_positive_rate",
+            "false_negative_rate",
+        }:
+            raise ValueError(f"Use the decrease operator to detect degradation in {self.metric}")
         return self
 
 

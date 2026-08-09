@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -62,5 +63,27 @@ class DeploymentRepository:
                     ORDER BY occurred_at DESC, version
                     """,
                     (model, environment, deployment, deployment),
+                ).fetchall()
+            )
+
+    def history(
+        self,
+        model: str,
+        start: datetime,
+        end: datetime,
+        environment: str = "production",
+    ) -> list[dict[str, Any]]:
+        with self._database.connection() as connection:
+            return list(
+                connection.execute(
+                    """
+                    SELECT * FROM deployments
+                    WHERE model = %s
+                      AND environment = %s
+                      AND occurred_at >= %s
+                      AND occurred_at <= %s
+                    ORDER BY occurred_at DESC, created_at DESC
+                    """,
+                    (model, environment, start, end),
                 ).fetchall()
             )

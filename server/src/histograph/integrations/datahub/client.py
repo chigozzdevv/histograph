@@ -59,6 +59,26 @@ class DataHubMcpClient:
             raise DataHubMcpError(f"DataHub MCP tool {tool} returned an error: {_text(result)}")
         return _payload(result)
 
+    async def health_check(self) -> dict[str, Any]:
+        async def check() -> dict[str, Any]:
+            async with self._session() as session:
+                result = await session.list_tools()
+                tools = sorted(tool.name for tool in result.tools)
+                required = {"get_entities", "get_lineage"}
+                missing = sorted(required - set(tools))
+                if missing:
+                    raise DataHubMcpError(
+                        f"DataHub MCP is missing required tools: {', '.join(missing)}"
+                    )
+                return {"status": "healthy", "tools": tools}
+
+        try:
+            return await asyncio.wait_for(
+                check(), timeout=self._settings.datahub_mcp_timeout_seconds
+            )
+        except TimeoutError as error:
+            raise DataHubMcpError("DataHub MCP health check timed out") from error
+
     async def collect_context(self, model_urn: str, max_hops: int = 3) -> dict[str, Any]:
         async def collect() -> dict[str, Any]:
             async with self._session() as session:

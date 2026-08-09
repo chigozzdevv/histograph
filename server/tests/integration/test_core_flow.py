@@ -253,3 +253,141 @@ def test_feature_drift_detects_a_shift_from_a_constant_baseline(
         assert detection_response.json()["triggered"] is True
         assert detection_response.json()["observed_value"] > 0.2
         assert detection_response.json()["incident_id"] is not None
+
+
+def test_canary_comparison_change_ingestion_and_verified_recovery(
+    integration_settings: Settings,
+) -> None:
+    with TestClient(create_app(integration_settings)) as client:
+        assert (
+            client.put(
+                "/v1/models/fraud-canary",
+                json={
+                    "name": "fraud-canary",
+                    "task": "binary_classification",
+                    "positive_class": "blocked",
+                    "positive_actual": "chargeback",
+                    "datahub_urn": "urn:li:mlModel:fraud-canary",
+                },
+            ).status_code
+            == 200
+        )
+        for version, status, traffic in (("v1", "active", 90), ("v2", "monitoring", 10)):
+            assert (
+                client.post(
+                    "/v1/events/deployments",
+                    json={
+                        "deployment": "fraud-canary-production",
+                        "model": "fraud-canary",
+                        "version": version,
+                        "strategy": "canary",
+                        "traffic_percentage": traffic,
+                        "status": status,
+                        "occurred_at": "2026-08-08T11:40:00Z",
+                    },
+                ).status_code
+                == 202
+            )
+
+        prediction_events = []
+        actual_events = []
+        reference_predictions = ["blocked", "blocked", "allowed", "allowed"]
+        candidate_predictions = ["blocked", "allowed", "allowed", "allowed"]
+        labels = ["chargeback", "chargeback", "legitimate", "legitimate"]
+        for version, predicted_classes in (
+            ("v1", reference_predictions),
+            ("v2", candidate_predictions),
+        ):
+            for index, (predicted_class, actual) in enumerate(
+                zip(predicted_classes, labels, strict=True)
+            ):
+                prediction_id = f"{version}-{index}"
+                prediction_events.append(
+                    {
+                        "prediction_id": prediction_id,
+                        "model": "fraud-canary",
+                        "version": version,
+                        "deployment": "fraud-canary-production",
+                        "observed_at": f"2026-08-08T11:5{index}:00Z",
+                        "predicted_class": predicted_class,
+                    }
+                )
+                actual_events.append(
+                    {
+                        "prediction_id": prediction_id,
+                        "actual": actual,
+                        "observed_at": f"2026-08-08T11:5{index}:30Z",
+                    }
+                )
+        predictions = client.post(
+            "/v1/events/predictions/batch", json={"events": prediction_events}
+        )
+        actuals = client.post("/v1/events/actuals/batch", json={"events": actual_events})
+        assert predictions.status_code == 202
+        assert predictions.json()["count"] == 8
+        assert actuals.status_code == 202
+        assert actuals.json()["count"] == 8
+
+        change = client.post(
+            "/v1/events/changes",
+            json={
+                "asset_urn": "urn:li:mlModel:fraud-canary",
+                "asset_name": "fraud-canary",
+                "asset_type": "model",
+                "version": "v2",
+                "change_type": "configuration",
+                "status": "applied",
+                "occurred_at": "2026-08-08T11:40:00Z",
+                "metadata": {"threshold": 0.9},
+            },
+        )
+        assert change.status_code == 202
+
+        monitor = client.post(
+            "/v1/monitors",
+            json={
+                "model": "fraud-canary",
+                "version": "v2",
+                "deployment": "fraud-canary-production",
+                "signal": "performance",
+                "metric": "recall",
+                "operator": "decrease",
+                "threshold": 0.2,
+                "evaluation_window_minutes": 15,
+                "minimum_sample_size": 4,
+            },
+        )
+        assert monitor.status_code == 201
+        detection = client.post(
+            f"/v1/detection/monitors/{monitor.json()['id']}/performance",
+            json={"as_of": "2026-08-08T12:00:00Z", "reference_version": "v1"},
+        )
+        assert detection.status_code == 200
+        assert detection.json()["triggered"] is True
+        assert detection.json()["comparison"]["degradation_percent"] == 50.0
+        incident_id = detection.json()["incident_id"]
+
+        recovery = client.post(
+            f"/v1/incidents/{incident_id}/recovery",
+            json={
+                "status": "verified",
+                "verified_at": "2026-08-08T12:05:00Z",
+                "checks": [
+                    {
+                        "name": "candidate_traffic_removed",
+                        "passed": True,
+                        "details": {"candidate_traffic_percentage": 0},
+                    }
+                ],
+            },
+        )
+        assert recovery.status_code == 200
+        resolved = client.patch(f"/v1/incidents/{incident_id}", json={"status": "resolved"})
+        assert resolved.status_code == 200
+        incident = client.get(f"/v1/incidents/{incident_id}").json()
+        assert incident["status"] == "resolved"
+        assert [event["event_type"] for event in incident["timeline"]] == [
+            "created",
+            "recovery_verified",
+            "status_changed",
+        ]

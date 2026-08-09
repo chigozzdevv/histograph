@@ -12,12 +12,12 @@ The repository compose file starts the Histograph dependencies without touching 
 ./scripts/compose.sh up -d postgres clickhouse redis
 ```
 
-Install the Python environment and run the checks:
+Install the Python environment, including the reproducible reference-model dependencies, and run
+the checks:
 
 ```bash
-uv sync --dev
-uv run ruff check server/src server/tests
-uv run pytest
+uv sync --dev --extra demo
+./scripts/check.sh
 ```
 
 With Postgres and ClickHouse running, execute the database-backed API flow as well:
@@ -37,7 +37,8 @@ The API is available at `http://localhost:8000`. Startup applies checksummed Pos
 The headless flow is:
 
 1. Register the model and its binary-class semantics at `/v1/models/{model_name}`.
-2. Send predictions, outcomes, or deployment events to `/v1/events`.
+2. Send predictions, outcomes, deployment events, or upstream change events to the matching
+   `/v1/events/*` endpoint. Prediction and outcome endpoints support batches of up to 5,000 events.
 3. Create a versioned monitor at `/v1/monitors`, or report deployment state so Histograph can
    resolve a monitor without an explicit version.
 4. Run the monitor's detection endpoint.
@@ -54,6 +55,26 @@ An investigation reads the model entity and both directions of its DataHub linea
 An incident can enter `resolved` only after persisted recovery evidence contains at least one passed
 verification check. A responsible engineer can instead set it to `closed`, but a manual closure
 requires a reason and is recorded separately in the incident timeline.
+
+## Reference fraud environment
+
+The runnable reference environment is in [`demo/README.md`](demo/README.md). It uses a credited,
+CC BY 4.0 synthetic mobile-money transaction dataset, a chronological split with explicit
+label-delay gaps, two model candidates, a held-out controlled replay, and viability gates that stop
+weak scenarios from being presented.
+
+It demonstrates two distinct release failures:
+
+1. A feature release silently scales `amount` by 100. Histograph measures PSI, reports the largest
+   directional performance loss in percentage points and relative percent, uses DataHub lineage to
+   constrain the suspected change, and confirms causality only after rollback and verified replay
+   recovery.
+2. A 10% model canary ships an incorrect decision threshold. Histograph compares v2 against v1 on
+   the same rows and time window, attributes the regression to the candidate deployment, and keeps
+   the incident unresolved until candidate traffic is removed and recovery is recorded.
+
+Histograph observes these models; it does not train, host, approve, or automatically roll them back.
+The training code exists to make the reliability environment reproducible.
 
 ## DataHub
 
@@ -76,6 +97,7 @@ export HISTOGRAPH_DATAHUB_GMS_TOKEN=<token>
 export HISTOGRAPH_DATAHUB_MCP_COMMAND=uvx
 export HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub==0.6.0
 export HISTOGRAPH_DATAHUB_MCP_PYTHON=3.13
+export HISTOGRAPH_DATAHUB_MCP_TIMEOUT_SECONDS=120
 ```
 
 The local DataHub quickstart is separate from the Histograph compose project so its own dependencies and lifecycle remain isolated.

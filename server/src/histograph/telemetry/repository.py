@@ -11,6 +11,11 @@ class TelemetryRepository:
         self._database = database
 
     def save(self, prediction: Prediction) -> None:
+        self.save_many([prediction])
+
+    def save_many(self, predictions: list[Prediction]) -> None:
+        if not predictions:
+            return
         self._database.client.insert(
             f"{self._database.name}.predictions",
             [
@@ -28,6 +33,7 @@ class TelemetryRepository:
                     prediction.latency_ms,
                     prediction.error_state,
                 ]
+                for prediction in predictions
             ],
             column_names=[
                 "prediction_id",

@@ -43,6 +43,7 @@ class DetectionResult:
     baseline_value: float | None
     threshold: float
     sample_size: int
+    comparison: dict[str, float | str | None]
     evidence: dict[str, Any]
 
 
@@ -59,7 +60,49 @@ def _matches(operator: str, observed: float, threshold: float, baseline: float |
         if baseline is None:
             return False
         return abs(observed - baseline) >= threshold
+    if operator == "decrease":
+        if baseline is None:
+            return False
+        return baseline - observed >= threshold
+    if operator == "increase":
+        if baseline is None:
+            return False
+        return observed - baseline >= threshold
     raise ValueError(f"Unsupported monitor operator: {operator}")
+
+
+_LOWER_IS_BETTER = {"false_positive_rate", "false_negative_rate", "psi"}
+
+
+def _comparison(metric: str, baseline: float | None, observed: float | None) -> dict[str, Any]:
+    if baseline is None or observed is None:
+        return {
+            "absolute_change": None,
+            "absolute_change_percentage_points": None,
+            "relative_change_percent": None,
+            "degradation_percent": None,
+            "direction": "unavailable",
+        }
+
+    absolute_change = observed - baseline
+    relative_change = None
+    if baseline != 0:
+        relative_change = absolute_change / abs(baseline) * 100
+
+    lower_is_better = metric in _LOWER_IS_BETTER
+    degraded = absolute_change > 0 if lower_is_better else absolute_change < 0
+    improved = absolute_change < 0 if lower_is_better else absolute_change > 0
+    degradation_percent = None
+    if relative_change is not None:
+        degradation_percent = relative_change if lower_is_better else -relative_change
+
+    return {
+        "absolute_change": absolute_change,
+        "absolute_change_percentage_points": absolute_change * 100,
+        "relative_change_percent": relative_change,
+        "degradation_percent": degradation_percent if degraded else 0.0,
+        "direction": "degraded" if degraded else "improved" if improved else "unchanged",
+    }
 
 
 class DetectionEngine:
@@ -109,6 +152,7 @@ class DetectionEngine:
             baseline_value=0.0 if sufficient_data else None,
             threshold=monitor.threshold,
             sample_size=len(current),
+            comparison=_comparison(monitor.metric, 0.0 if sufficient_data else None, observed),
             evidence={
                 "feature": feature,
                 "baseline_window": {
@@ -179,6 +223,7 @@ class DetectionEngine:
             baseline_value=baseline,
             threshold=monitor.threshold,
             sample_size=len(current_pairs),
+            comparison=_comparison(monitor.metric, baseline, observed),
             evidence={
                 "baseline_window": {
                     "start": baseline_start.isoformat(),
@@ -193,6 +238,83 @@ class DetectionEngine:
             },
         )
         event = self._event_from_result(monitor_id, monitor, result, end) if triggered else None
+        return result, event
+
+    def evaluate_performance_against_version(
+        self,
+        monitor_id: UUID,
+        monitor: Monitor,
+        model: ModelDefinition,
+        reference_version: str,
+        as_of: datetime,
+    ) -> tuple[DetectionResult, MonitorEvent | None]:
+        if not monitor.enabled:
+            raise ValueError("Disabled monitors cannot be evaluated")
+        if monitor.version is None:
+            raise ValueError("Canary comparisons require an explicit candidate version")
+        if monitor.version == reference_version:
+            raise ValueError("Candidate and reference versions must differ")
+        if model.name != monitor.model:
+            raise ValueError("Monitor model does not match the registered model definition")
+
+        end = ensure_utc(as_of)
+        current_start = end - timedelta(minutes=monitor.evaluation_window_minutes)
+        reference_pairs = self._telemetry.binary_pairs(
+            monitor.model,
+            reference_version,
+            current_start,
+            end,
+            model.positive_class,
+            model.positive_actual,
+        )
+        candidate_pairs = self._telemetry.binary_pairs(
+            monitor.model,
+            monitor.version,
+            current_start,
+            end,
+            model.positive_class,
+            model.positive_actual,
+        )
+        reference_metrics = calculate_binary_metrics(reference_pairs)
+        candidate_metrics = calculate_binary_metrics(candidate_pairs)
+        baseline = self._metric_value(reference_metrics, monitor.metric)
+        observed = self._metric_value(candidate_metrics, monitor.metric)
+        sufficient_data = (
+            len(reference_pairs) >= monitor.minimum_sample_size
+            and len(candidate_pairs) >= monitor.minimum_sample_size
+        )
+        triggered = (
+            sufficient_data
+            and observed is not None
+            and _matches(monitor.operator, observed, monitor.threshold, baseline)
+        )
+        comparison = _comparison(monitor.metric, baseline, observed)
+        result = DetectionResult(
+            status="evaluated" if sufficient_data else "insufficient_data",
+            triggered=triggered,
+            metric=monitor.metric,
+            observed_value=observed,
+            baseline_value=baseline,
+            threshold=monitor.threshold,
+            sample_size=len(candidate_pairs),
+            comparison=comparison,
+            evidence={
+                "comparison_type": "candidate_against_reference_version",
+                "window": {"start": current_start.isoformat(), "end": end.isoformat()},
+                "reference": {
+                    "version": reference_version,
+                    "metrics": self._metrics_dict(reference_metrics),
+                },
+                "candidate": {
+                    "version": monitor.version,
+                    "metrics": self._metrics_dict(candidate_metrics),
+                },
+                "comparison": comparison,
+            },
+        )
+        event = (
+            self._event_from_result(monitor_id, monitor, result, end) if result.triggered else None
+        )
         return result, event
 
     @staticmethod

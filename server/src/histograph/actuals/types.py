@@ -17,3 +17,7 @@ class Actual(EventModel):
     @classmethod
     def normalize_observed_at(cls, value: datetime) -> datetime:
         return ensure_utc(value)
+
+
+class ActualBatch(EventModel):
+    events: list[Actual] = Field(min_length=1, max_length=5000)

@@ -19,13 +19,11 @@ from histograph.settings import Settings
 
 
 async def main() -> None:
-    context = await DataHubMcpClient(Settings()).collect_context(
-        "urn:li:mlModel:histograph-health-check", max_hops=1
-    )
-    trace = context.get("tool_trace")
-    if not isinstance(trace, list) or not trace:
-        raise RuntimeError("DataHub MCP returned no tool trace")
-    print(f"DataHub MCP healthy: {', '.join(str(tool) for tool in trace)}")
+    health = await DataHubMcpClient(Settings()).health_check()
+    tools = health.get("tools")
+    if not isinstance(tools, list) or not tools:
+        raise RuntimeError("DataHub MCP returned no tools")
+    print(f"DataHub MCP healthy: {', '.join(str(tool) for tool in tools)}")
 
 
 asyncio.run(main())

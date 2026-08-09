@@ -20,6 +20,7 @@ class FeatureDriftCheck(BaseModel):
 
 class PerformanceCheck(BaseModel):
     as_of: datetime | None = None
+    reference_version: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 def _monitor(request: Request, monitor_id: UUID) -> Monitor:
@@ -111,6 +112,7 @@ def check_feature_drift(
         "baseline_value": result.baseline_value,
         "threshold": result.threshold,
         "sample_size": result.sample_size,
+        "comparison": result.comparison,
         "evidence": result.evidence,
     }
 
@@ -124,12 +126,25 @@ def check_performance(
     monitor = _monitor(request, monitor_id)
     if monitor.signal != "performance":
         raise HTTPException(status_code=422, detail="Monitor is not configured for performance")
-    result, event = DetectionEngine(request.app.state.telemetry).evaluate_performance(
-        monitor_id,
-        monitor,
-        _model(request, monitor.model),
-        request_body.as_of or utc_now(),
-    )
+    engine = DetectionEngine(request.app.state.telemetry)
+    if request_body.reference_version is None:
+        result, event = engine.evaluate_performance(
+            monitor_id,
+            monitor,
+            _model(request, monitor.model),
+            request_body.as_of or utc_now(),
+        )
+    else:
+        try:
+            result, event = engine.evaluate_performance_against_version(
+                monitor_id,
+                monitor,
+                _model(request, monitor.model),
+                request_body.reference_version,
+                request_body.as_of or utc_now(),
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
     incident_id = None
     if event is not None:
         event_id = request.app.state.monitors.record_event(event, result.evidence)
@@ -146,5 +161,6 @@ def check_performance(
         "baseline_value": result.baseline_value,
         "threshold": result.threshold,
         "sample_size": result.sample_size,
+        "comparison": result.comparison,
         "evidence": result.evidence,
     }

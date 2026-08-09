@@ -58,3 +58,25 @@ def test_feature_drift_monitor_requires_psi_semantics() -> None:
             operator="lt",
             threshold=0.2,
         )
+
+
+def test_performance_degradation_operator_must_match_metric_direction() -> None:
+    with pytest.raises(ValidationError, match="Use the increase operator"):
+        Monitor(
+            model="fraud",
+            version="v1",
+            signal="performance",
+            metric="false_positive_rate",
+            operator="decrease",
+            threshold=0.1,
+        )
+
+    with pytest.raises(ValidationError, match="Use the decrease operator"):
+        Monitor(
+            model="fraud",
+            version="v1",
+            signal="performance",
+            metric="recall",
+            operator="increase",
+            threshold=0.1,
+        )

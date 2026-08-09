@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from histograph.incidents.service import IncidentService
-from histograph.incidents.types import IncidentTransition
+from histograph.incidents.types import IncidentTransition, RecoveryVerification
 
 
 class FakeIncidentStore:
@@ -23,6 +23,13 @@ class FakeIncidentStore:
     def transition(self, incident_id, status, reason):
         self.transitioned = (incident_id, status, reason)
         self.record = {**self.record, "status": status}
+        return self.record
+
+    def record_recovery(self, incident_id, recovery):
+        self.record = {
+            **self.record,
+            "evidence": {"recovery": recovery.model_dump(mode="json")},
+        }
         return self.record
 
 
@@ -89,3 +96,29 @@ def test_incident_service_records_valid_transition() -> None:
     assert result is not None
     assert result["status"] == "investigating"
     assert store.transitioned == (store.incident_id, "investigating", None)
+
+
+def test_recording_recovery_persists_structured_verification() -> None:
+    store = FakeIncidentStore()
+    recovery = RecoveryVerification.model_validate(
+        {
+            "status": "verified",
+            "verified_at": "2026-08-08T12:00:00Z",
+            "checks": [
+                {
+                    "name": "recall_recovered",
+                    "passed": True,
+                    "details": {
+                        "baseline": 0.82,
+                        "observed": 0.81,
+                        "relative_change_percent": -1.22,
+                    },
+                }
+            ],
+        }
+    )
+
+    result = IncidentService(store).record_recovery(store.incident_id, recovery)
+
+    assert result is not None
+    assert result["evidence"]["recovery"]["status"] == "verified"

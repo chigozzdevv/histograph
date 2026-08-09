@@ -45,10 +45,18 @@ async def investigate_incident(
     if incident is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
     model_urn = _registered_model_urn(request, incident)
-    agent = InvestigationAgent(
-        request.app.state.incidents,
-        DataHubMcpClient(request.app.state.settings),
-    )
+    release_context = getattr(request.app.state, "release_context", None)
+    if release_context is None:
+        agent = InvestigationAgent(
+            request.app.state.incidents,
+            DataHubMcpClient(request.app.state.settings),
+        )
+    else:
+        agent = InvestigationAgent(
+            request.app.state.incidents,
+            DataHubMcpClient(request.app.state.settings),
+            release_context,
+        )
     try:
         return await agent.investigate(
             incident_id,

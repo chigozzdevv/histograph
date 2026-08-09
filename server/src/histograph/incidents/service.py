@@ -16,6 +16,10 @@ class IncidentStore(Protocol):
         self, incident_id: UUID, status: str, reason: str | None
     ) -> dict[str, Any] | None: ...
 
+    def record_recovery(
+        self, incident_id: UUID, recovery: RecoveryVerification
+    ) -> dict[str, Any] | None: ...
+
 
 class IncidentService:
     def __init__(self, repository: IncidentStore):
@@ -64,6 +68,18 @@ class IncidentService:
                 f"Incident cannot transition from {current_status} to {transition.status}"
             )
         return self._repository.transition(incident_id, transition.status, transition.reason)
+
+    def record_recovery(
+        self,
+        incident_id: UUID,
+        recovery: RecoveryVerification,
+    ) -> dict[str, Any] | None:
+        current = self._repository.get(incident_id)
+        if current is None:
+            return None
+        if current["status"] == "closed":
+            raise ValueError("Recovery cannot be recorded for a manually closed incident")
+        return self._repository.record_recovery(incident_id, recovery)
 
 
 def _has_verified_recovery(incident: dict[str, Any]) -> bool:

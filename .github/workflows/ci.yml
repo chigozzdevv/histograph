@@ -48,5 +48,5 @@ jobs:
         with:
           enable-cache: true
       - run: uv python install 3.13
-      - run: uv sync --locked --dev
+      - run: uv sync --locked --dev --extra demo
       - run: ./scripts/check.sh

@@ -1,3 +1,4 @@
+import json
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -16,10 +17,20 @@ class InvestigationDataHub(Protocol):
     ) -> dict[str, Any]: ...
 
 
+class InvestigationReleaseHistory(Protocol):
+    def collect(self, incident: dict[str, Any], asset_urns: list[str]) -> dict[str, Any]: ...
+
+
 class InvestigationAgent:
-    def __init__(self, control: InvestigationControl, datahub: InvestigationDataHub):
+    def __init__(
+        self,
+        control: InvestigationControl,
+        datahub: InvestigationDataHub,
+        release_history: InvestigationReleaseHistory | None = None,
+    ):
         self._control = control
         self._datahub = datahub
+        self._release_history = release_history
 
     async def investigate(
         self,
@@ -33,7 +44,12 @@ class InvestigationAgent:
             raise LookupError("Incident not found")
 
         context = await self._datahub.collect_context(model_urn, max_hops=max_hops)
-        report = _build_report(incident, model_urn, context)
+        releases = (
+            self._release_history.collect(incident, _asset_urns(context))
+            if self._release_history is not None
+            else {}
+        )
+        report = _build_report(incident, model_urn, context, releases)
         writeback: dict[str, Any] | None = None
         if write_back:
             writeback = await self._datahub.save_investigation(
@@ -58,7 +74,10 @@ class InvestigationAgent:
 
 
 def _build_report(
-    incident: dict[str, Any], model_urn: str, context: dict[str, Any]
+    incident: dict[str, Any],
+    model_urn: str,
+    context: dict[str, Any],
+    releases: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     upstream = _lineage_entities(context.get("upstream"))
     downstream = _lineage_entities(context.get("downstream"))
@@ -67,18 +86,100 @@ def _build_report(
     owners = sorted(
         {owner for entity in [*model_entities, *related] for owner in entity.get("owners", [])}
     )
-    detection = (incident.get("evidence") or {}).get("detection", {})
+    incident_evidence = incident.get("evidence") or {}
+    detection = incident_evidence.get("detection", {})
+    recovery = incident_evidence.get("recovery")
     metric = incident.get("metric", "signal")
     model = incident.get("model", "model")
     version = incident.get("version", "unknown")
+    release_evidence = releases or {}
+    changes = _dict_items(release_evidence.get("changes"))
+    deployments = _dict_items(release_evidence.get("deployments"))
+    feature = detection.get("feature") if isinstance(detection, dict) else None
+    lineage_changes = [change for change in changes if change.get("lineage_match") is True]
+    matching_changes = [
+        change for change in lineage_changes if _change_matches_feature(change, feature)
+    ]
+    candidate_deployments = [
+        deployment for deployment in deployments if deployment.get("version") == version
+    ]
+    recovery_verified = _recovery_verified(incident)
+    rolled_back_change = any(
+        change.get("status") == "rolled_back" or change.get("change_type") == "rollback"
+        for change in matching_changes
+    )
+    rolled_back_deployment = any(
+        deployment.get("status") == "rolled_back" for deployment in candidate_deployments
+    )
 
-    if not upstream and not downstream:
+    if matching_changes:
+        release = next(
+            (
+                change
+                for change in matching_changes
+                if change.get("status") == "applied" and change.get("change_type") != "rollback"
+            ),
+            matching_changes[0],
+        )
+        status = (
+            "confirmed_cause"
+            if recovery_verified and rolled_back_change
+            else "probable_cause"
+            if not candidate_deployments
+            else "correlated_change"
+        )
+        lineage_status = "mapped"
+        summary = (
+            f"{release.get('asset_name', 'An upstream asset')} {release.get('version', '')} "
+            f"changed before the {metric} signal for {model} {version}. The changed asset is "
+            "in the model's DataHub lineage"
+            + (
+                " and verified recovery followed its rollback."
+                if status == "confirmed_cause"
+                else "; rollback is not yet verified."
+            )
+        )
+        root_cause = {
+            "kind": "upstream_release",
+            "asset_urn": release.get("asset_urn"),
+            "asset_name": release.get("asset_name"),
+            "version": release.get("version"),
+            "change_type": release.get("change_type"),
+            "occurred_at": release.get("occurred_at"),
+        }
+    elif candidate_deployments and detection.get("comparison_type") == (
+        "candidate_against_reference_version"
+    ):
+        deployment = candidate_deployments[0]
+        status = (
+            "confirmed_cause" if recovery_verified and rolled_back_deployment else "probable_cause"
+        )
+        lineage_status = "mapped" if upstream or downstream else "unavailable"
+        summary = (
+            f"Model {model} {version} degraded against its same-window reference after a "
+            f"{deployment.get('strategy', 'deployment')} release"
+            + (
+                ", and verified recovery followed rollback."
+                if status == "confirmed_cause"
+                else "; rollback is not yet verified."
+            )
+        )
+        root_cause = {
+            "kind": "model_release",
+            "deployment": deployment.get("deployment"),
+            "version": deployment.get("version"),
+            "occurred_at": deployment.get("occurred_at"),
+        }
+    elif not upstream and not downstream:
+        status = "insufficient_evidence"
         lineage_status = "unavailable"
         summary = (
             f"DataHub returned no lineage for {model} {version}; Histograph cannot establish "
             "a dependency-level explanation or blast radius."
         )
+        root_cause = None
     else:
+        status = "insufficient_evidence"
         lineage_status = "mapped"
         summary = (
             f"Histograph mapped {len(upstream)} upstream dependencies and "
@@ -86,9 +187,10 @@ def _build_report(
             f"The {metric} signal has not been tied to a specific dependency change; "
             "lineage alone is not root-cause evidence."
         )
+        root_cause = None
 
     return {
-        "status": "insufficient_evidence",
+        "status": status,
         "lineage_status": lineage_status,
         "summary": summary,
         "model": {"name": model, "version": version, "urn": model_urn},
@@ -98,6 +200,27 @@ def _build_report(
             "detection": detection,
         },
         "hypotheses": [
+            {
+                "id": "release_correlation",
+                "status": (
+                    "confirmed"
+                    if status == "confirmed_cause"
+                    else "supported"
+                    if status in {"probable_cause", "correlated_change"}
+                    else "unsupported"
+                ),
+                "statement": (
+                    "A lineage-matched release occurred before the signal and was evaluated "
+                    "against model deployment and recovery evidence."
+                ),
+                "evidence_urns": sorted(
+                    {
+                        change["asset_urn"]
+                        for change in matching_changes
+                        if isinstance(change.get("asset_urn"), str)
+                    }
+                ),
+            },
             {
                 "id": "upstream_dependency",
                 "status": "candidate" if upstream else "unsupported",
@@ -122,16 +245,55 @@ def _build_report(
             "related_entities": related,
         },
         "owners": owners,
+        "root_cause": root_cause,
+        "release_evidence": release_evidence,
+        "recovery": recovery if isinstance(recovery, dict) else None,
         "evidence": {
             "datahub_model_urn": model_urn,
             "tools": context.get("tool_trace", []),
             "raw_context": context,
         },
-        "recommended_action": (
-            "Keep the incident open, inspect the candidate upstream assets, and only "
-            "approve rollback or retraining after a change or quality signal is corroborated."
-        ),
+        "recommended_action": _recommended_action(status, root_cause),
     }
+
+
+def _dict_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _change_matches_feature(change: dict[str, Any], feature: Any) -> bool:
+    if not isinstance(feature, str):
+        return False
+    metadata = change.get("metadata")
+    changed_features = metadata.get("changed_features") if isinstance(metadata, dict) else None
+    return isinstance(changed_features, list) and feature in changed_features
+
+
+def _recovery_verified(incident: dict[str, Any]) -> bool:
+    evidence = incident.get("evidence")
+    recovery = evidence.get("recovery") if isinstance(evidence, dict) else None
+    return isinstance(recovery, dict) and recovery.get("status") == "verified"
+
+
+def _recommended_action(status: str, root_cause: dict[str, Any] | None) -> str:
+    if status == "confirmed_cause":
+        return "Preserve the verified rollback and resolution evidence in Histograph and DataHub."
+    if status == "probable_cause" and root_cause is not None:
+        return (
+            "Keep the incident open and request approval to roll back the identified release; "
+            "resolve only after fresh feature and performance checks pass."
+        )
+    if status == "correlated_change":
+        return (
+            "Keep the incident open and isolate the upstream and model releases with a control "
+            "comparison before approving either rollback."
+        )
+    return (
+        "Keep the incident open, inspect the candidate upstream assets, and only approve "
+        "rollback or retraining after a change or quality signal is corroborated."
+    )
 
 
 def _lineage_entities(payload: Any) -> list[dict[str, Any]]:
@@ -253,9 +415,34 @@ def _as_markdown(report: dict[str, Any]) -> str:
         "",
         report["recommended_action"],
         "",
-        "## Hypotheses",
-        "",
     ]
+    recovery = report.get("recovery")
+    if isinstance(recovery, dict):
+        lines.extend(
+            [
+                "## Recovery evidence",
+                "",
+                f"- Status: `{recovery.get('status', 'unknown')}`",
+            ]
+        )
+        if recovery.get("verified_at") is not None:
+            lines.append(f"- Verified at: `{recovery['verified_at']}`")
+        checks = recovery.get("checks")
+        if isinstance(checks, list):
+            for check in checks:
+                if not isinstance(check, dict):
+                    continue
+                lines.append(
+                    f"- Check `{check.get('name', 'unnamed')}`: "
+                    f"`{'passed' if check.get('passed') is True else 'failed'}`"
+                )
+                details = check.get("details")
+                if isinstance(details, dict) and details:
+                    lines.append(
+                        f"  - Details: `{json.dumps(details, sort_keys=True, default=str)}`"
+                    )
+        lines.append("")
+    lines.extend(["## Hypotheses", ""])
     for hypothesis in report["hypotheses"]:
         lines.append(
             f"- **{hypothesis['id']}** ({hypothesis['status']}): {hypothesis['statement']}"
