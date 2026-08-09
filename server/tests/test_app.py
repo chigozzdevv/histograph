@@ -14,3 +14,11 @@ def test_app_factory_does_not_require_live_storage() -> None:
     assert "/v1/events/actuals/batch" in paths
     assert "/v1/events/changes" in paths
     assert "/v1/models/{model_name}" in paths
+    assert "/v1/actions/{action_id}/approval" in paths
+    assert "/v1/actions/{action_id}/result" in paths
+    assert "/v1/overview" in paths
+    assert "/v1/deployments" in paths
+    assert "/v1/deployments/{deployment_id}/predict" in paths
+    assert "/v1/deployments/{deployment_id}/compare" in paths
+    assert "/v1/activity" in paths
+    assert "/v1/demo/scenarios" in paths
