@@ -1,0 +1,155 @@
+name: histograph-demo
+
+x-histograph-image: &histograph-image
+  image: ${HISTOGRAPH_IMAGE:-histograph-demo:local}
+  build:
+    context: .
+
+x-control-plane-environment: &control-plane-environment
+  HISTOGRAPH_ENVIRONMENT: demo
+  HISTOGRAPH_POSTGRES_DSN: postgresql://histograph:${HISTOGRAPH_POSTGRES_PASSWORD:-histograph}@postgres:5432/histograph
+  HISTOGRAPH_CLICKHOUSE_HOST: clickhouse
+  HISTOGRAPH_CLICKHOUSE_PORT: 8123
+  HISTOGRAPH_CLICKHOUSE_DATABASE: histograph
+  HISTOGRAPH_CLICKHOUSE_USER: histograph
+  HISTOGRAPH_CLICKHOUSE_PASSWORD: ${HISTOGRAPH_CLICKHOUSE_PASSWORD:-histograph}
+  HISTOGRAPH_DATAHUB_GMS_URL: ${HISTOGRAPH_DATAHUB_GMS_URL:-http://host.docker.internal:8080}
+  HISTOGRAPH_DATAHUB_GMS_TOKEN: ${HISTOGRAPH_DATAHUB_GMS_TOKEN:-}
+  HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED: ${HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED:-true}
+  HISTOGRAPH_GITHUB_APP_ID: ${HISTOGRAPH_GITHUB_APP_ID:-}
+  HISTOGRAPH_GITHUB_APP_PRIVATE_KEY: ${HISTOGRAPH_GITHUB_APP_PRIVATE_KEY:-}
+  HISTOGRAPH_GITHUB_WEBHOOK_SECRET: ${HISTOGRAPH_GITHUB_WEBHOOK_SECRET:-}
+  HISTOGRAPH_GITHUB_CONFIGURATION_TOKEN: ${HISTOGRAPH_GITHUB_CONFIGURATION_TOKEN:-}
+  HISTOGRAPH_REFERENCE_CONTROL_TOKEN: ${HISTOGRAPH_REFERENCE_CONTROL_TOKEN:-}
+  HISTOGRAPH_PLAYGROUND_ALLOWED_HOSTS: '["runtime"]'
+  HISTOGRAPH_DEMO_CONTROL_TOKEN: ${HISTOGRAPH_DEMO_CONTROL_TOKEN:-}
+  HISTOGRAPH_DEMO_PUBLIC_SCENARIOS_ENABLED: ${HISTOGRAPH_DEMO_PUBLIC_SCENARIOS_ENABLED:-false}
+  HISTOGRAPH_DEMO_API_URL: http://api:8000
+  HISTOGRAPH_DEMO_RUNTIME_URL: http://runtime:8100
+  HISTOGRAPH_DEMO_REPLAY_PATH: /app/demo/artifacts/replay.parquet
+  HISTOGRAPH_DEMO_ARTIFACT_PATH: /app/demo/artifacts/mobile_money_fraud.joblib
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: histograph
+      POSTGRES_USER: histograph
+      POSTGRES_PASSWORD: ${HISTOGRAPH_POSTGRES_PASSWORD:-histograph}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U histograph -d histograph"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.7-alpine
+    environment:
+      CLICKHOUSE_DB: histograph
+      CLICKHOUSE_USER: histograph
+      CLICKHOUSE_PASSWORD: ${HISTOGRAPH_CLICKHOUSE_PASSWORD:-histograph}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    <<: *histograph-image
+    command:
+      - uvicorn
+      - histograph.api.main:app
+      - --app-dir
+      - server/src
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    environment: *control-plane-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    <<: *histograph-image
+    command: ["python", "-m", "histograph.workers"]
+    environment: *control-plane-environment
+    depends_on:
+      api:
+        condition: service_healthy
+      runtime:
+        condition: service_healthy
+
+  runtime:
+    <<: *histograph-image
+    command: ["python", "-m", "demo.runtime"]
+    environment:
+      HISTOGRAPH_REFERENCE_WORKSPACE_ROOT: /app
+      HISTOGRAPH_REFERENCE_STATE_PATH: /state/runtime.sqlite3
+      HISTOGRAPH_REFERENCE_HISTOGRAPH_API_URL: http://api:8000
+      HISTOGRAPH_REFERENCE_CONTROL_TOKEN: ${HISTOGRAPH_REFERENCE_CONTROL_TOKEN:-}
+    volumes:
+      - runtime-state:/state
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  reconciler:
+    <<: *histograph-image
+    command: ["python", "-m", "demo.runtime.reconcile"]
+    environment:
+      <<: *control-plane-environment
+      HISTOGRAPH_REFERENCE_RECONCILER_STATE_PATH: /state/reconciler.sqlite3
+      HISTOGRAPH_REFERENCE_RUNTIME_URL: http://runtime:8100
+      HISTOGRAPH_REFERENCE_GITHUB_INSTALLATION_ID: ${HISTOGRAPH_REFERENCE_GITHUB_INSTALLATION_ID:-}
+      HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_OWNER: ${HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_OWNER:-}
+      HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_NAME: ${HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_NAME:-}
+      HISTOGRAPH_REFERENCE_GITHUB_BRANCH: ${HISTOGRAPH_REFERENCE_GITHUB_BRANCH:-main}
+      HISTOGRAPH_REFERENCE_GITHUB_MANIFEST_PATH: ${HISTOGRAPH_REFERENCE_GITHUB_MANIFEST_PATH:-.histograph/deployments/mobile-money-fraud.yaml}
+    volumes:
+      - reconciler-state:/state
+    depends_on:
+      runtime:
+        condition: service_healthy
+
+  proxy:
+    image: caddy:2.10-alpine
+    environment:
+      HISTOGRAPH_DEMO_SITE_ADDRESS: ${HISTOGRAPH_DEMO_SITE_ADDRESS:-http://localhost}
+    ports:
+      - "${HISTOGRAPH_HTTP_PORT:-80}:80"
+      - "${HISTOGRAPH_HTTPS_PORT:-443}:443"
+      - "${HISTOGRAPH_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  clickhouse-data:
+  clickhouse-logs:
+  runtime-state:
+  reconciler-state:
+  caddy-data:
+  caddy-config:
