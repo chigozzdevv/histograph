@@ -72,3 +72,5 @@ def test_reference_training_uses_temporal_partitions_and_persists_artifact(
     }
     assert artifact["threshold"] == manifest["threshold"]
     assert artifact["features"] == manifest["features"]
+    assert artifact_path.with_name("replay.parquet").exists()
+    assert manifest["replay"]["rows"] == manifest["split_rows"]["test"]

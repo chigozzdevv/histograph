@@ -161,6 +161,9 @@ def train_reference_model(
     }
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    replay_path = artifact_path.with_name("replay.parquet")
+    replay_rows = _write_replay(splits.test, replay_path)
+    manifest["replay"] = {"path": replay_path.name, "rows": replay_rows}
     joblib.dump(
         {
             "model": selected,
@@ -172,6 +175,19 @@ def train_reference_model(
     )
     manifest_path.write_text(json.dumps(_jsonable(manifest), indent=2, sort_keys=True) + "\n")
     return manifest
+
+
+def _write_replay(test: pd.DataFrame, path: Path, max_rows: int = 10_000) -> int:
+    columns = ["step", *FEATURES, "is_fraud"]
+    replay = test[columns].head(max_rows).copy()
+    escaped_path = str(path).replace("'", "''")
+    connection = duckdb.connect()
+    try:
+        connection.register("replay", replay)
+        connection.execute(f"COPY replay TO '{escaped_path}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+    finally:
+        connection.close()
+    return len(replay)
 
 
 def _load_sample(path: Path, max_rows: int) -> pd.DataFrame:

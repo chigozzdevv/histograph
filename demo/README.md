@@ -81,6 +81,12 @@ performance degradation, opens incidents, investigates with live DataHub lineage
 runs a fresh recovery window, persists the verification checks, reinvestigates, and resolves only
 after recovery.
 
+The scenario runner calls detection at fixed timestamps so the controlled replay remains
+deterministic. The product runtime does not require those calls: configure each monitor's `feature`
+or `reference_version`, start `python -m histograph.workers`, and the separate worker continuously
+claims due monitors. The database-backed integration suite exercises that unattended path through
+approval, adapter execution, independent recovery evidence, and resolution.
+
 Run the independent model-release scenario with:
 
 ```bash
@@ -89,6 +95,53 @@ uv run --extra demo python -m demo run-model-canary
 
 That scenario serves v1 at 90% and v2 at 10%, runs both versions on the same held-out rows in the
 same 15-minute window, and raises an incident when the v2 decision-threshold release loses recall.
+
+## GitOps deployment contract
+
+[`../.histograph/deployments/mobile-money-fraud.yaml`](../.histograph/deployments/mobile-money-fraud.yaml)
+is the canonical GitHub deployment definition. It references the input/output JSON Schemas and
+playground examples stored beside it. Both releases point to the generated model artifact: v1 uses
+the trained decision threshold and v2 deliberately uses `0.99`. This represents two releases of one
+selected model, not two unrelated trained classifiers. [`deployment.yaml`](deployment.yaml) remains
+the small localhost-compatible manifest used by focused runtime development tests.
+
+After importing this manifest, a probable v2 canary cause selects the `github_pr` remediation
+adapter. The worker prepares a PR that changes stable traffic to 100% and candidate traffic to 0%.
+The signed PR merge is the human approval. GitHub deployment success completes execution, while a
+separate runtime deployment event showing v2 at zero traffic is still required before Histograph can
+confirm the cause and resolve the incident.
+
+[`deployment-feature-release.yaml`](deployment-feature-release.yaml) is a separate, single-fault
+manifest for the upstream feature scenario. Keeping it separate prevents the model-canary scenario
+from mixing a bad decision threshold with a simultaneous feature-scaling failure.
+
+Run the actual reference server after training:
+
+```bash
+export HISTOGRAPH_REFERENCE_CONTROL_TOKEN=<random-runtime-control-token>
+PYTHONPATH=server/src uv run --extra demo python -m demo.runtime
+```
+
+It exposes `POST /v1/predict`, `POST /v1/predict/batch`, and `POST /v1/outcomes/batch` on port 8100.
+Bearer-protected `POST /v1/compare` evaluates stable and candidate releases without telemetry, while
+only bearer-protected `POST /v1/deployments/apply` mutates serving state. Normal telemetry delivery
+is non-blocking for inference and is retried from a durable local outbox.
+
+Once the GitHub App configuration described in the root README is present, run the independent
+reference reconciler with
+`PYTHONPATH=server/src uv run --extra demo python -m demo.runtime.reconcile`. It applies only the
+exact repository revision it fetched and reports the deployment result through GitHub.
+
+After the initial manifest is applied, emit held-out traffic through the real 90/10 gateway and
+create the continuously evaluated canary monitor:
+
+```bash
+PYTHONPATH=server/src uv run --extra demo python -m demo emit-runtime-canary
+```
+
+This command does not call detection, investigation, approval, rollback, or recovery endpoints. It
+waits for the runtime telemetry outbox to drain, creates the monitor, and leaves the rest of the
+flow to the continuous worker, signed GitHub events, and the reference reconciler.
 
 ## What “caused by the release” means
 
@@ -108,8 +161,9 @@ roll back the lineage-matched release.”
 
 ## Reproducibility and limitations
 
-- Generated data, prepared data, and model artifacts are ignored by Git; manifests include source
-  and prepared-file SHA-256 hashes.
+- Generated data, prepared data, model artifacts, and the compact replay bundle are ignored by Git;
+  the image workflow rebuilds them from the pinned source and manifests include source and
+  prepared-file SHA-256 hashes.
 - The source is synthetic and has a much higher fraud prevalence than many deployed systems.
 - The unit-change and threshold-change releases are deliberate failure injections.
 - The replay demonstrates the incident-response system. It does not establish that this classifier

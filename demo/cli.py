@@ -12,7 +12,11 @@ from demo import (
 )
 from demo.data import prepare_dataset
 from demo.download import download_dataset
-from demo.scenario import run_feature_release_scenario, run_model_canary_scenario
+from demo.scenario import (
+    emit_runtime_canary_traffic,
+    run_feature_release_scenario,
+    run_model_canary_scenario,
+)
 from demo.train import train_reference_model
 
 
@@ -46,6 +50,14 @@ def main() -> None:
     canary_parser = subparsers.add_parser("run-model-canary")
     _scenario_arguments(canary_parser)
 
+    runtime_canary_parser = subparsers.add_parser("emit-runtime-canary")
+    runtime_canary_parser.add_argument("--api-url", default="http://localhost:8000")
+    runtime_canary_parser.add_argument("--runtime-url", default="http://localhost:8100")
+    runtime_canary_parser.add_argument("--input", type=Path, default=PROCESSED_DATA)
+    runtime_canary_parser.add_argument("--artifact", type=Path, default=MODEL_ARTIFACT)
+    runtime_canary_parser.add_argument("--sample-size", type=int, default=1000)
+    runtime_canary_parser.add_argument("--outbox-wait-seconds", type=float, default=30)
+
     arguments = parser.parse_args()
     result: dict[str, Any]
     if arguments.command == "download-data":
@@ -69,7 +81,7 @@ def main() -> None:
             write_back=arguments.write_back,
             allow_nonviable=arguments.allow_nonviable,
         )
-    else:
+    elif arguments.command == "run-model-canary":
         result = run_model_canary_scenario(
             arguments.api_url,
             arguments.input,
@@ -77,6 +89,15 @@ def main() -> None:
             sample_size=arguments.sample_size,
             investigate=not arguments.skip_investigation,
             write_back=arguments.write_back,
+        )
+    else:
+        result = emit_runtime_canary_traffic(
+            arguments.api_url,
+            arguments.runtime_url,
+            arguments.input,
+            arguments.artifact,
+            sample_size=arguments.sample_size,
+            outbox_wait_seconds=arguments.outbox_wait_seconds,
         )
     print(json.dumps(result, indent=2, sort_keys=True))
 

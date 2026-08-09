@@ -1,0 +1,31 @@
+apiVersion: histograph.ai/v1
+kind: ModelDeployment
+metadata:
+  name: mobile-money-fraud-production
+spec:
+  environment: production
+  model:
+    name: mobile-money-fraud-detection
+    task: binary_classification
+    positiveClass: fraud
+    positiveActual: 1
+    datahubModelUrn: urn:li:mlModel:(urn:li:dataPlatform:mlflow,mobile-money-fraud-detection,PROD)
+  runtime:
+    provider: reference
+    endpoint: http://localhost:8100
+  stable:
+    version: v1
+    artifact: demo/artifacts/mobile_money_fraud.joblib
+    trafficPercentage: 100
+    configuration:
+      decisionThreshold: 0.8247828532693404
+  features:
+    - name: mobile-money-amount-feature
+      assetUrn: urn:li:mlFeature:(mobile_money_transaction_features,amount)
+      inputFeature: amount
+      version: v2
+      configuration:
+        scaleMultiplier: 100
+      rollbackVersion: v1
+      rollbackConfiguration:
+        scaleMultiplier: 1

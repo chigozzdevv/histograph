@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -171,6 +172,7 @@ def run_feature_release_scenario(
                 "deployment": deployment,
                 "signal": "feature_drift",
                 "metric": "psi",
+                "feature": "amount",
                 "operator": "gt",
                 "threshold": 0.2,
                 "baseline_window_minutes": 60,
@@ -195,7 +197,7 @@ def run_feature_release_scenario(
         )
         feature_detection = api.post(
             f"/v1/detection/monitors/{feature_monitor['id']}/feature-drift",
-            {"feature": "amount", "as_of": as_of.isoformat()},
+            {"as_of": as_of.isoformat()},
         )
         performance_detection = api.post(
             f"/v1/detection/monitors/{performance_monitor['id']}/performance",
@@ -429,6 +431,7 @@ def run_model_canary_scenario(
             {
                 "model": model_name,
                 "version": "v2",
+                "reference_version": "v1",
                 "deployment": deployment,
                 "signal": "performance",
                 "metric": "recall",
@@ -440,7 +443,7 @@ def run_model_canary_scenario(
         )
         detection = api.post(
             f"/v1/detection/monitors/{monitor['id']}/performance",
-            {"as_of": as_of.isoformat(), "reference_version": "v1"},
+            {"as_of": as_of.isoformat()},
         )
         _require_trigger("same-window canary degradation", detection)
         incident_id = str(detection["incident_id"])
@@ -510,6 +513,106 @@ def run_model_canary_scenario(
     }
 
 
+def emit_runtime_canary_traffic(
+    api_url: str,
+    runtime_url: str,
+    prepared_path: Path,
+    artifact_path: Path,
+    *,
+    sample_size: int = 1000,
+    outbox_wait_seconds: float = 30,
+) -> dict[str, Any]:
+    from histograph.integrations.github.types import ModelDeploymentManifest
+
+    artifact = _load_artifact(artifact_path)
+    frame = _load_replay_frame(prepared_path, artifact["manifest"], sample_size)
+    runtime = HistographApi(runtime_url)
+    api = HistographApi(api_url)
+    try:
+        state = runtime.get("/v1/runtime")
+        if state.get("status") != "ready" or not isinstance(state.get("manifest"), dict):
+            raise RuntimeError("Reference runtime has no applied deployment manifest")
+        manifest = ModelDeploymentManifest.model_validate(state["manifest"])
+        candidate = manifest.spec.candidate
+        if candidate is None or candidate.traffic_percentage <= 0:
+            raise RuntimeError("Applied deployment manifest has no active candidate release")
+        now = datetime.now(UTC).replace(microsecond=0)
+        start = now - timedelta(minutes=10)
+        seconds = (now - start).total_seconds()
+        prediction_requests = []
+        labels: dict[str, int] = {}
+        for index, (_, row) in enumerate(frame.iterrows()):
+            prediction_id = f"runtime-canary-{uuid4().hex}"
+            observed_at = start + timedelta(seconds=seconds * index / len(frame))
+            prediction_requests.append(
+                {
+                    "prediction_id": prediction_id,
+                    "features": {feature: _scalar(row[feature]) for feature in FEATURES},
+                    "observed_at": observed_at.isoformat(),
+                }
+            )
+            labels[prediction_id] = int(row["is_fraud"])
+        responses: list[dict[str, Any]] = []
+        for batch in _batches(prediction_requests):
+            result = runtime.post("/v1/predict/batch", {"events": batch})
+            events = result.get("events")
+            if not isinstance(events, list) or not all(isinstance(item, dict) for item in events):
+                raise RuntimeError("Reference runtime returned an invalid prediction batch")
+            responses.extend(events)
+        outcomes = [
+            {
+                "prediction_id": prediction["prediction_id"],
+                "actual": labels[str(prediction["prediction_id"])],
+                "observed_at": (now + timedelta(seconds=1)).isoformat(),
+                "metadata": {"source": "gitops_runtime_canary_demo"},
+            }
+            for prediction in responses
+        ]
+        for batch in _batches(outcomes):
+            runtime.post("/v1/outcomes/batch", {"events": batch})
+        _wait_for_outbox(runtime, outbox_wait_seconds)
+
+        counts: dict[str, int] = {}
+        for prediction in responses:
+            version = str(prediction["version"])
+            counts[version] = counts.get(version, 0) + 1
+        candidate_count = counts.get(candidate.version, 0)
+        stable_count = counts.get(manifest.spec.stable.version, 0)
+        minimum_sample_size = min(50, candidate_count, stable_count)
+        if minimum_sample_size < 2:
+            raise RuntimeError("Runtime routing did not produce enough samples for both releases")
+        monitor = api.post(
+            "/v1/monitors",
+            {
+                "model": manifest.spec.model.name,
+                "version": candidate.version,
+                "reference_version": manifest.spec.stable.version,
+                "deployment": manifest.metadata.name,
+                "environment": manifest.spec.environment,
+                "signal": "performance",
+                "metric": "recall",
+                "operator": "decrease",
+                "threshold": 0.05,
+                "evaluation_window_minutes": 15,
+                "minimum_sample_size": minimum_sample_size,
+                "check_interval_seconds": 5,
+            },
+        )
+    finally:
+        runtime.close()
+        api.close()
+    return {
+        "scenario": "gitops_runtime_canary",
+        "deployment": manifest.metadata.name,
+        "model": manifest.spec.model.name,
+        "revision": state["revision"],
+        "routing_counts": counts,
+        "monitor_id": monitor["id"],
+        "status": "awaiting_continuous_worker",
+        "next": "The worker will detect, investigate, and open a rollback PR without manual calls.",
+    }
+
+
 def _load_artifact(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Model artifact not found: {path}")
@@ -529,7 +632,7 @@ def _load_replay_frame(path: Path, manifest: dict[str, Any], sample_size: int) -
             """
             SELECT * FROM read_parquet(?)
             WHERE step >= ?
-            ORDER BY hash(step, initiator, recipient, amount)
+            ORDER BY hash(step, amount, transaction_type)
             LIMIT ?
             """,
             [str(path), test_start, sample_size],
@@ -626,3 +729,13 @@ def _require_trigger(name: str, detection: dict[str, Any]) -> None:
         raise RuntimeError(
             f"Expected {name} to trigger, received:\n{json.dumps(detection, indent=2)}"
         )
+
+
+def _wait_for_outbox(runtime: HistographApi, timeout_seconds: float) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        state = runtime.get("/v1/runtime")
+        if state.get("outbox_pending") == 0:
+            return
+        time.sleep(0.25)
+    raise RuntimeError("Reference runtime telemetry outbox did not drain before the timeout")
