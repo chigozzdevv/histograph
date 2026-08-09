@@ -87,3 +87,24 @@ class DeploymentRepository:
                     (model, environment, start, end),
                 ).fetchall()
             )
+
+    def latest_state(
+        self,
+        model: str,
+        version: str,
+        environment: str = "production",
+        deployment: str | None = None,
+    ) -> dict[str, Any] | None:
+        with self._database.connection() as connection:
+            return connection.execute(
+                """
+                SELECT * FROM deployments
+                WHERE model = %s
+                  AND version = %s
+                  AND environment = %s
+                  AND (%s::text IS NULL OR deployment = %s::text)
+                ORDER BY occurred_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (model, version, environment, deployment, deployment),
+            ).fetchone()

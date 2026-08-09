@@ -63,3 +63,15 @@ class ChangeRepository:
                     (environment, start, end),
                 ).fetchall()
             )
+
+    def latest(self, asset_urn: str, environment: str = "production") -> dict[str, Any] | None:
+        with self._database.connection() as connection:
+            return connection.execute(
+                """
+                SELECT * FROM changes
+                WHERE asset_urn = %s AND environment = %s
+                ORDER BY occurred_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (asset_urn, environment),
+            ).fetchone()

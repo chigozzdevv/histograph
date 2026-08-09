@@ -39,6 +39,11 @@ def transition_incident(
         ) from error
     if incident is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+    if transition.status in {"resolved", "closed"}:
+        request.app.state.remediation.cancel_for_incident(
+            incident_id,
+            transition.reason or "Incident reached verified resolution",
+        )
     return incident
 
 

@@ -15,11 +15,14 @@ class Monitor(EventModel):
     deployment: str | None = Field(default=None, max_length=200)
     signal: Literal["performance", "feature_drift"]
     metric: str = Field(min_length=1, max_length=100)
+    feature: str | None = Field(default=None, min_length=1, max_length=200)
+    reference_version: str | None = Field(default=None, min_length=1, max_length=100)
     operator: Literal["lt", "lte", "gt", "gte", "change", "decrease", "increase"]
     threshold: float = Field(description="Threshold in the metric's native unit")
     baseline_window_minutes: int = Field(default=60, ge=1)
     evaluation_window_minutes: int = Field(default=15, ge=1)
     minimum_sample_size: int = Field(default=30, ge=2)
+    check_interval_seconds: int = Field(default=60, ge=5, le=86_400)
     enabled: bool = True
 
     @model_validator(mode="after")
@@ -29,7 +32,19 @@ class Monitor(EventModel):
                 raise ValueError("Feature drift monitors currently support only the psi metric")
             if self.operator not in {"gt", "gte"}:
                 raise ValueError("PSI monitors require the gt or gte operator")
+            if self.feature is None:
+                raise ValueError("Feature drift monitors require a configured feature")
+            if self.reference_version is not None:
+                raise ValueError("Feature drift monitors cannot configure a reference version")
             return self
+
+        if self.feature is not None:
+            raise ValueError("Performance monitors cannot configure a feature")
+        if self.reference_version is not None:
+            if self.version is None:
+                raise ValueError("Canary comparisons require an explicit candidate version")
+            if self.reference_version == self.version:
+                raise ValueError("Candidate and reference versions must differ")
 
         supported = {
             "accuracy",

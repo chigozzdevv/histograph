@@ -6,6 +6,7 @@ from pydantic import Field
 from histograph.agents.investigation.agent import InvestigationAgent
 from histograph.core.events import EventModel
 from histograph.integrations.datahub.client import DataHubMcpClient, DataHubMcpError
+from histograph.remediation.service import RemediationService
 
 router = APIRouter(prefix="/v1/investigations", tags=["investigations"])
 
@@ -58,12 +59,25 @@ async def investigate_incident(
             release_context,
         )
     try:
-        return await agent.investigate(
+        report = await agent.investigate(
             incident_id,
             model_urn,
             max_hops=request_body.max_hops,
             write_back=request_body.write_back,
         )
+        remediation_repository = getattr(request.app.state, "remediation", None)
+        if remediation_repository is not None:
+            action_id = RemediationService(
+                remediation_repository,
+                getattr(request.app.state, "gitops", None),
+            ).propose_from_investigation(incident, report)
+            report["remediation_action_id"] = str(action_id) if action_id is not None else None
+        complete_investigation = getattr(
+            request.app.state.incidents, "complete_investigation", None
+        )
+        if callable(complete_investigation):
+            complete_investigation(incident_id)
+        return report
     except DataHubMcpError as error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

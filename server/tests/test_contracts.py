@@ -55,8 +55,31 @@ def test_feature_drift_monitor_requires_psi_semantics() -> None:
             version="v1",
             signal="feature_drift",
             metric="accuracy",
+            feature="amount",
             operator="lt",
             threshold=0.2,
+        )
+
+
+def test_monitor_stores_the_target_needed_for_continuous_evaluation() -> None:
+    with pytest.raises(ValidationError, match="configured feature"):
+        Monitor(
+            model="fraud",
+            version="v1",
+            signal="feature_drift",
+            metric="psi",
+            operator="gt",
+            threshold=0.2,
+        )
+
+    with pytest.raises(ValidationError, match="explicit candidate version"):
+        Monitor(
+            model="fraud",
+            reference_version="v1",
+            signal="performance",
+            metric="recall",
+            operator="decrease",
+            threshold=0.1,
         )
 
 

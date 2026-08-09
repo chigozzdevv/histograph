@@ -40,6 +40,7 @@ def test_feature_drift_requires_the_configured_minimum_sample_size() -> None:
         version="v1",
         signal="feature_drift",
         metric="psi",
+        feature="merchant_velocity",
         operator="gt",
         threshold=0.2,
         minimum_sample_size=3,
@@ -62,6 +63,7 @@ def test_feature_drift_comparison_treats_increasing_psi_as_degradation() -> None
         version="v1",
         signal="feature_drift",
         metric="psi",
+        feature="amount",
         operator="gt",
         threshold=0.2,
         minimum_sample_size=10,
@@ -167,6 +169,7 @@ def test_canary_performance_compares_candidate_and_reference_in_the_same_window(
     monitor = Monitor(
         model="fraud",
         version="v2",
+        reference_version="v1",
         signal="performance",
         metric="recall",
         operator="decrease",

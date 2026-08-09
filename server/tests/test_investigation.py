@@ -208,6 +208,60 @@ async def test_final_writeback_includes_verified_recovery_evidence():
     assert '"recall": 0.82' in content
 
 
+class FakeRecoveredCanaryControl(FakeRecoveredControl):
+    def get(self, incident_id):
+        incident = super().get(incident_id)
+        if incident is None:
+            return None
+        incident["signal"] = "performance"
+        incident["metric"] = "recall"
+        incident["evidence"]["detection"] = {
+            "comparison_type": "candidate_against_reference_version"
+        }
+        return incident
+
+
+class FakeStoppedCanaryHistory:
+    def collect(self, incident, asset_urns):
+        return {
+            "changes": [],
+            "deployments": [
+                {
+                    "deployment": "fraud-production",
+                    "version": "v2",
+                    "strategy": "canary",
+                    "status": "stopped",
+                    "traffic_percentage": 0,
+                    "occurred_at": "2026-08-08T12:00:00+00:00",
+                },
+                {
+                    "deployment": "fraud-production",
+                    "version": "v2",
+                    "strategy": "canary",
+                    "status": "active",
+                    "traffic_percentage": 10,
+                    "occurred_at": "2026-08-08T11:00:00+00:00",
+                },
+            ],
+        }
+
+
+@pytest.mark.asyncio
+async def test_verified_zero_traffic_canary_stop_confirms_the_model_release():
+    control = FakeRecoveredCanaryControl()
+    agent = InvestigationAgent(control, FakeNoLineageDataHub(), FakeStoppedCanaryHistory())
+
+    result = await agent.investigate(
+        control.incident_id,
+        "urn:li:mlModel:fraud-v2",
+        max_hops=2,
+    )
+
+    assert result["status"] == "confirmed_cause"
+    assert result["root_cause"]["kind"] == "model_release"
+    assert result["root_cause"]["rollback_observed"] is True
+
+
 class FakeReleaseHistory:
     def collect(self, incident, asset_urns):
         feature_urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,features,PROD)"

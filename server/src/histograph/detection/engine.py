@@ -364,4 +364,12 @@ class DetectionEngine:
             baseline_value=result.baseline_value,
             threshold=result.threshold,
             occurred_at=occurred_at,
+            affected_slice={
+                key: value
+                for key, value in {
+                    "environment": monitor.environment,
+                    "deployment": monitor.deployment,
+                }.items()
+                if value is not None
+            },
         )

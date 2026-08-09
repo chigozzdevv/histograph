@@ -109,7 +109,9 @@ def _build_report(
         for change in matching_changes
     )
     rolled_back_deployment = any(
-        deployment.get("status") == "rolled_back" for deployment in candidate_deployments
+        deployment.get("status") in {"stopped", "rolled_back"}
+        and float(deployment.get("traffic_percentage", -1)) == 0
+        for deployment in candidate_deployments
     )
 
     if matching_changes:
@@ -146,6 +148,7 @@ def _build_report(
             "version": release.get("version"),
             "change_type": release.get("change_type"),
             "occurred_at": release.get("occurred_at"),
+            "rollback_observed": rolled_back_change,
         }
     elif candidate_deployments and detection.get("comparison_type") == (
         "candidate_against_reference_version"
@@ -168,7 +171,11 @@ def _build_report(
             "kind": "model_release",
             "deployment": deployment.get("deployment"),
             "version": deployment.get("version"),
+            "strategy": deployment.get("strategy"),
+            "status": deployment.get("status"),
+            "traffic_percentage": deployment.get("traffic_percentage"),
             "occurred_at": deployment.get("occurred_at"),
+            "rollback_observed": rolled_back_deployment,
         }
     elif not upstream and not downstream:
         status = "insufficient_evidence"
