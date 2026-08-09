@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://histograph.ai/schemas/mobile-money-fraud-input.schema.json",
+  "title": "Mobile money fraud prediction",
+  "description": "Synthetic mobile-money transaction features used by the Histograph reliability demo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "amount",
+    "old_balance_initiator",
+    "new_balance_initiator",
+    "old_balance_recipient",
+    "new_balance_recipient",
+    "initiator_balance_delta",
+    "recipient_balance_delta",
+    "account_velocity_24h",
+    "recipient_velocity_24h",
+    "transaction_type"
+  ],
+  "properties": {
+    "amount": {"type": "number", "minimum": 0, "title": "Amount"},
+    "old_balance_initiator": {"type": "number", "title": "Initiator balance before"},
+    "new_balance_initiator": {"type": "number", "title": "Initiator balance after"},
+    "old_balance_recipient": {"type": "number", "title": "Recipient balance before"},
+    "new_balance_recipient": {"type": "number", "title": "Recipient balance after"},
+    "initiator_balance_delta": {"type": "number", "title": "Initiator balance delta"},
+    "recipient_balance_delta": {"type": "number", "title": "Recipient balance delta"},
+    "account_velocity_24h": {"type": "integer", "minimum": 0, "title": "Initiator transactions in 24h"},
+    "recipient_velocity_24h": {"type": "integer", "minimum": 0, "title": "Recipient transactions in 24h"},
+    "transaction_type": {
+      "type": "string",
+      "title": "Transaction type",
+      "enum": ["CASH_IN", "CASH_OUT", "DEPOSIT", "PAYMENT", "TRANSFER", "WITHDRAWAL"]
+    }
+  }
+}

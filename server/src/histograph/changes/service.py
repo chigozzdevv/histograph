@@ -10,12 +10,24 @@ class ChangeWriter(Protocol):
     def save(self, change: Change) -> UUID: ...
 
 
+class ChangeObserver(Protocol):
+    def observe_change(self, change: Change) -> None: ...
+
+
 class ChangeService:
-    def __init__(self, repository: ChangeWriter):
+    def __init__(
+        self,
+        repository: ChangeWriter,
+        observers: tuple[ChangeObserver, ...] = (),
+    ):
         self._repository = repository
+        self._observers = observers
 
     def ingest(self, change: Change) -> UUID:
-        return self._repository.save(change)
+        change_id = self._repository.save(change)
+        for observer in self._observers:
+            observer.observe_change(change)
+        return change_id
 
 
 class ChangeReader(Protocol):

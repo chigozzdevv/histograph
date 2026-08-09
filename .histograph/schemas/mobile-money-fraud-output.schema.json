@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://histograph.ai/schemas/mobile-money-fraud-output.schema.json",
+  "title": "Mobile money fraud prediction result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prediction_id",
+    "model",
+    "version",
+    "deployment",
+    "score",
+    "predicted_class",
+    "threshold",
+    "observed_at"
+  ],
+  "properties": {
+    "prediction_id": {"type": "string"},
+    "model": {"type": "string"},
+    "version": {"type": "string"},
+    "deployment": {"type": "string"},
+    "score": {"type": "number", "minimum": 0, "maximum": 1},
+    "predicted_class": {"type": "string", "enum": ["fraud", "not_fraud"]},
+    "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "observed_at": {"type": "string", "format": "date-time"}
+  }
+}

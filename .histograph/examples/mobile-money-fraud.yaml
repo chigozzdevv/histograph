@@ -1,0 +1,29 @@
+examples:
+  - id: legitimate-payment
+    label: Typical payment
+    expectedActual: 0
+    input:
+      amount: 7149.19
+      old_balance_initiator: 3899332.30
+      new_balance_initiator: 3892183.11
+      old_balance_recipient: 272146.02
+      new_balance_recipient: 279295.21
+      initiator_balance_delta: 7149.19
+      recipient_balance_delta: 7149.19
+      account_velocity_24h: 112
+      recipient_velocity_24h: 42
+      transaction_type: PAYMENT
+  - id: fraudulent-transfer
+    label: Labeled fraudulent transfer
+    expectedActual: 1
+    input:
+      amount: 19703.97
+      old_balance_initiator: 711063.97
+      new_balance_initiator: 691359.99
+      old_balance_recipient: 24183.71
+      new_balance_recipient: 43887.68
+      initiator_balance_delta: 19703.98
+      recipient_balance_delta: 19703.97
+      account_velocity_24h: 46
+      recipient_velocity_24h: 18
+      transaction_type: TRANSFER
