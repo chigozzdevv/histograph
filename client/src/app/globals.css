@@ -59,6 +59,15 @@ a {
   background-size: 4rem 4rem;
 }
 
+.landing-cta-grid {
+  background-image:
+    radial-gradient(circle at 50% 48%, rgba(148, 28, 255, 0.13), transparent 30%),
+    radial-gradient(circle at 78% 34%, rgba(119, 217, 167, 0.06), transparent 22%),
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 5rem 5rem, 5rem 5rem;
+}
+
 .histograph-register path {
   stroke: rgba(255, 255, 255, 0.06);
   vector-effect: non-scaling-stroke;

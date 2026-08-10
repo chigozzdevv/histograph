@@ -209,6 +209,25 @@ function HistographSignal() {
         DATAHUB LINEAGE
       </text>
 
+      <g>
+        <path
+          d="M400 326V486"
+          fill="none"
+          stroke="rgba(119,217,167,0.16)"
+          strokeDasharray="2 7"
+        />
+        <text
+          fill="rgba(119,217,167,0.68)"
+          fontFamily="var(--font-geist-mono)"
+          fontSize="9"
+          letterSpacing="0.08em"
+          x="412"
+          y="342"
+        >
+          RUNTIME / RECOVERY
+        </text>
+      </g>
+
       <g fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.25">
         <path d="M124 410H196M244 410H316" />
       </g>
@@ -283,11 +302,11 @@ function HistographSignal() {
 
 export function IncidentFlow() {
   return (
-    <figure className="histograph-canvas relative h-full min-h-130 overflow-hidden lg:min-h-[calc(100svh-4.25rem)]">
+    <figure className="histograph-canvas relative h-full min-h-80 overflow-hidden sm:min-h-105 lg:min-h-[calc(100svh-4.25rem)]">
       <HistographSignal />
       <figcaption className="sr-only">
         Model health degrades after a source change. Histograph traces the cause backward through
-        DataHub lineage and carries a verified recovery back into the production health signal.
+        DataHub lineage, then verifies recovery separately through fresh runtime evidence.
       </figcaption>
     </figure>
   );

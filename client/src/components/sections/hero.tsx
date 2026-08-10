@@ -20,10 +20,10 @@ function ArrowUpRight() {
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden border-b border-white/12 bg-midnight" id="product">
+    <section className="relative overflow-hidden border-b border-white/12 bg-midnight">
       <div className="grid min-h-[calc(100svh-4.25rem)] lg:grid-cols-2">
-        <div className="relative z-10 flex flex-col justify-center px-5 py-18 sm:px-8 lg:py-24 lg:pr-[2vw] lg:pl-[6.25vw]">
-          <h1 className="max-w-200 text-[clamp(2.25rem,11vw,4rem)] leading-[0.96] font-normal tracking-[-0.065em] text-white lg:text-[clamp(2.125rem,3.3vw,4.5rem)]">
+        <div className="relative z-10 flex flex-col justify-center px-5 py-12 sm:px-8 sm:py-18 lg:py-24 lg:pr-[2vw] lg:pl-[6.25vw]">
+          <h1 className="max-w-200 text-[clamp(2.25rem,11vw,4rem)] leading-[0.96] font-normal tracking-[-0.065em] text-white lg:text-[clamp(2.125rem,3.65vw,4.5rem)]">
             {heroContent.title.map((line) => (
               <span className="block lg:whitespace-nowrap" key={line}>
                 {line}
@@ -47,7 +47,7 @@ export function Hero() {
           </div>
         </div>
 
-        <div className="relative min-h-130 lg:min-h-0">
+        <div className="relative min-h-80 sm:min-h-105 lg:min-h-0">
           <IncidentFlow />
         </div>
       </div>
