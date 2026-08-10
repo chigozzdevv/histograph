@@ -288,6 +288,54 @@ class FakeReleaseHistory:
         }
 
 
+class ActiveCanaryHistory:
+    def collect(self, incident, asset_urns):
+        return {
+            "changes": [],
+            "deployments": [
+                {
+                    "deployment": "fraud-production",
+                    "version": "v2",
+                    "strategy": "canary",
+                    "status": "active",
+                    "traffic_percentage": 10,
+                    "occurred_at": "2026-08-08T08:00:00+00:00",
+                    "evidence_basis": "active_deployment_state",
+                }
+            ],
+        }
+
+
+class FakeActiveCanaryControl(FakeControl):
+    def get(self, incident_id):
+        incident = super().get(incident_id)
+        if incident is None:
+            return None
+        incident["signal"] = "performance"
+        incident["metric"] = "recall"
+        incident["evidence"]["detection"] = {
+            "comparison_type": "candidate_against_reference_version"
+        }
+        return incident
+
+
+@pytest.mark.asyncio
+async def test_active_canary_state_supports_probable_cause_outside_release_window():
+    control = FakeActiveCanaryControl()
+    agent = InvestigationAgent(control, FakeNoLineageDataHub(), ActiveCanaryHistory())
+
+    result = await agent.investigate(
+        control.incident_id,
+        "urn:li:mlModel:fraud-v2",
+        max_hops=2,
+    )
+
+    assert result["status"] == "probable_cause"
+    assert result["root_cause"]["kind"] == "model_release"
+    assert result["root_cause"]["evidence_basis"] == "active_deployment_state"
+    assert "runtime-confirmed canary candidate was actively serving" in result["summary"]
+
+
 @pytest.mark.asyncio
 async def test_investigation_identifies_a_lineage_matched_feature_release_as_probable():
     control = FakeControl()

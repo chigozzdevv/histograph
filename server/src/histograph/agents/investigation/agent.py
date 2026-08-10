@@ -154,13 +154,19 @@ def _build_report(
         "candidate_against_reference_version"
     ):
         deployment = candidate_deployments[0]
+        active_state = deployment.get("evidence_basis") == "active_deployment_state"
         status = (
             "confirmed_cause" if recovery_verified and rolled_back_deployment else "probable_cause"
         )
         lineage_status = "mapped" if upstream or downstream else "unavailable"
         summary = (
-            f"Model {model} {version} degraded against its same-window reference after a "
-            f"{deployment.get('strategy', 'deployment')} release"
+            f"Model {model} {version} degraded against its same-window reference "
+            + (
+                f"while the runtime-confirmed {deployment.get('strategy', 'deployment')} "
+                "candidate was actively serving"
+                if active_state
+                else f"after a {deployment.get('strategy', 'deployment')} release"
+            )
             + (
                 ", and verified recovery followed rollback."
                 if status == "confirmed_cause"
@@ -175,6 +181,7 @@ def _build_report(
             "status": deployment.get("status"),
             "traffic_percentage": deployment.get("traffic_percentage"),
             "occurred_at": deployment.get("occurred_at"),
+            "evidence_basis": deployment.get("evidence_basis", "release_window"),
             "rollback_observed": rolled_back_deployment,
         }
     elif not upstream and not downstream:

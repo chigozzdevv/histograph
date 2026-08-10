@@ -1078,7 +1078,7 @@ def test_gitops_pr_merge_drives_execution_and_independently_verified_recovery(
         reference_runtime.apply(
             "release-sha",
             github_client.content,
-            datetime(2026, 8, 9, 11, 40, tzinfo=UTC),
+            datetime(2026, 8, 9, 10, 0, tzinfo=UTC),
         )
         assert asyncio.run(telemetry_worker.run_once(datetime(2030, 8, 9, tzinfo=UTC))) == 2
         deployments = client.get(
@@ -1331,6 +1331,13 @@ def test_gitops_pr_merge_drives_execution_and_independently_verified_recovery(
         assert completed_run is not None
         assert completed_run["status"] == "resolved"
         assert completed_run["stage"] == "resolved"
+        activity = client.get("/v1/activity?limit=100").json()
+        assert any(
+            event["category"] == "demo_run"
+            and event["event_type"] == "scenario_resolved"
+            and event["entity_id"] == str(demo_run_id)
+            for event in activity
+        )
         assert [event["event_type"] for event in final_action["timeline"]] == [
             "proposed",
             "approved",
