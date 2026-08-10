@@ -37,8 +37,8 @@ class FakeDeployments:
     def history(self, model, start, end, environment="production"):
         return []
 
-    def latest_state(
-        self, model, version, environment="production", deployment=None
+    def state_at(
+        self, model, version, as_of, environment="production", deployment=None
     ) -> dict[str, Any] | None:
         return None
 
@@ -78,12 +78,13 @@ def test_release_context_marks_only_changes_in_the_datahub_lineage() -> None:
 
 
 class ActiveCanaryDeployments(FakeDeployments):
-    def latest_state(
-        self, model, version, environment="production", deployment=None
+    def state_at(
+        self, model, version, as_of, environment="production", deployment=None
     ) -> dict[str, Any] | None:
-        assert (model, version, environment, deployment) == (
+        assert (model, version, as_of, environment, deployment) == (
             "mobile-money-fraud",
             "v2",
+            datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
             "production",
             "fraud-production",
         )

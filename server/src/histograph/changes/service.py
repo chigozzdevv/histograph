@@ -45,10 +45,11 @@ class DeploymentReader(Protocol):
         environment: str = "production",
     ) -> list[dict[str, Any]]: ...
 
-    def latest_state(
+    def state_at(
         self,
         model: str,
         version: str,
+        as_of: datetime,
         environment: str = "production",
         deployment: str | None = None,
     ) -> dict[str, Any] | None: ...
@@ -74,9 +75,10 @@ class ReleaseContextService:
             and isinstance(version, str)
             and not any(deployment.get("version") == version for deployment in deployments)
         ):
-            current = self._deployments.latest_state(
+            current = self._deployments.state_at(
                 model,
                 version,
+                end,
                 environment,
                 _incident_deployment(incident),
             )

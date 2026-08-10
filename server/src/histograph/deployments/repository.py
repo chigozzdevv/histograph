@@ -108,3 +108,26 @@ class DeploymentRepository:
                 """,
                 (model, version, environment, deployment, deployment),
             ).fetchone()
+
+    def state_at(
+        self,
+        model: str,
+        version: str,
+        as_of: datetime,
+        environment: str = "production",
+        deployment: str | None = None,
+    ) -> dict[str, Any] | None:
+        with self._database.connection() as connection:
+            return connection.execute(
+                """
+                SELECT * FROM deployments
+                WHERE model = %s
+                  AND version = %s
+                  AND environment = %s
+                  AND occurred_at <= %s
+                  AND (%s::text IS NULL OR deployment = %s::text)
+                ORDER BY occurred_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (model, version, environment, as_of, deployment, deployment),
+            ).fetchone()
