@@ -103,15 +103,16 @@ def _build_report(
     candidate_deployments = [
         deployment for deployment in deployments if deployment.get("version") == version
     ]
+    candidate_deployment = candidate_deployments[0] if candidate_deployments else None
     recovery_verified = _recovery_verified(incident)
     rolled_back_change = any(
         change.get("status") == "rolled_back" or change.get("change_type") == "rollback"
         for change in matching_changes
     )
-    rolled_back_deployment = any(
-        deployment.get("status") in {"stopped", "rolled_back"}
-        and float(deployment.get("traffic_percentage", -1)) == 0
-        for deployment in candidate_deployments
+    rolled_back_deployment = bool(
+        candidate_deployment is not None
+        and candidate_deployment.get("status") in {"stopped", "rolled_back"}
+        and float(candidate_deployment.get("traffic_percentage", -1)) == 0
     )
 
     if matching_changes:
@@ -150,10 +151,10 @@ def _build_report(
             "occurred_at": release.get("occurred_at"),
             "rollback_observed": rolled_back_change,
         }
-    elif candidate_deployments and detection.get("comparison_type") == (
+    elif candidate_deployment is not None and detection.get("comparison_type") == (
         "candidate_against_reference_version"
     ):
-        deployment = candidate_deployments[0]
+        deployment = candidate_deployment
         active_state = deployment.get("evidence_basis") == "active_deployment_state"
         status = (
             "confirmed_cause" if recovery_verified and rolled_back_deployment else "probable_cause"
