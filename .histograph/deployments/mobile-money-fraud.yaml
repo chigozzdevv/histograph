@@ -23,19 +23,19 @@ spec:
   stable:
     version: v1
     artifact: demo/artifacts/mobile_money_fraud.joblib
-    trafficPercentage: 90
     configuration:
       decisionThreshold: 0.8247828532693404
+    trafficPercentage: 100.0
   candidate:
     version: v2
     artifact: demo/artifacts/mobile_money_fraud.joblib
-    trafficPercentage: 10
     configuration:
       decisionThreshold: 0.99
+    trafficPercentage: 0.0
   features:
-    - name: mobile-money-amount-feature
-      assetUrn: urn:li:mlFeature:(mobile_money_transaction_features,amount)
-      inputFeature: amount
-      version: v1
-      configuration:
-        scaleMultiplier: 1
+  - name: mobile-money-amount-feature
+    assetUrn: urn:li:mlFeature:(mobile_money_transaction_features,amount)
+    inputFeature: amount
+    version: v1
+    configuration:
+      scaleMultiplier: 1
