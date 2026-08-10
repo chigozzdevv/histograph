@@ -319,6 +319,29 @@ class ReferenceRuntime:
                     },
                 )
             )
+        current_versions = {
+            release.version for release in [active.stable, active.candidate] if release is not None
+        }
+        if previous is not None:
+            for release in [previous.stable, previous.candidate]:
+                if release is None or release.version in current_versions:
+                    continue
+                events.append(
+                    (
+                        "deployment",
+                        {
+                            "deployment": active.manifest.metadata.name,
+                            "model": spec.model.name,
+                            "version": release.version,
+                            "environment": spec.environment,
+                            "strategy": strategy,
+                            "traffic_percentage": 0.0,
+                            "status": "stopped",
+                            "occurred_at": active.applied_at.isoformat(),
+                            "endpoint": spec.runtime.endpoint,
+                        },
+                    )
+                )
         previous_features = (
             {item.asset_urn: item for item in previous.manifest.spec.features}
             if previous is not None

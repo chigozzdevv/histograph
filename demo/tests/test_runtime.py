@@ -33,13 +33,25 @@ class RecordingSink:
         self.events.append((event_type, payload))
 
 
-def _manifest(artifact: str, *, feature_version: str = "v1", scale: int = 1) -> str:
+def _manifest(
+    artifact: str,
+    *,
+    feature_version: str = "v1",
+    scale: int = 1,
+    model_rollback: bool = False,
+) -> str:
     rollback = ""
     if feature_version == "v2":
         rollback = """\
       rollbackVersion: v1
       rollbackConfiguration:
         scaleMultiplier: 1
+"""
+    model_rollback_fields = ""
+    if model_rollback:
+        model_rollback_fields = f"""\
+    rollbackVersion: v0
+    rollbackArtifact: {artifact}
 """
     return f"""\
 apiVersion: histograph.ai/v1
@@ -63,6 +75,7 @@ spec:
     trafficPercentage: 90
     configuration:
       decisionThreshold: 0.5
+{model_rollback_fields}\
   candidate:
     version: v2
     artifact: {artifact}
@@ -228,6 +241,48 @@ def test_reference_runtime_applies_declared_feature_rollback(tmp_path: Path) -> 
     assert parse_manifest(rolled_back).spec.features[0].configuration == {"scaleMultiplier": 1}
     assert before.score == pytest.approx(0.9)
     assert after.score == pytest.approx(0.01)
+
+
+def test_reference_runtime_marks_a_replaced_model_version_stopped(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path)
+    state = RuntimeStateStore(tmp_path / "model-rollback-runtime.sqlite3")
+    from demo.runtime.service import ReferenceRuntime
+
+    runtime = ReferenceRuntime(tmp_path, state)
+    released = _manifest(artifact, model_rollback=True)
+    runtime.apply("model-v1", released, datetime(2026, 8, 9, 12, tzinfo=UTC))
+    rolled_back = render_rollback(
+        released,
+        {
+            "action_type": "rollback_model",
+            "target": {
+                "deployment": "fraud-production",
+                "model": "fraud",
+                "version": "v1",
+                "environment": "production",
+            },
+        },
+    )
+    runtime.apply("model-v0", rolled_back, datetime(2026, 8, 9, 12, 1, tzinfo=UTC))
+
+    deployment_events = [
+        record["payload"]
+        for record in state.due(datetime(2030, 8, 9, tzinfo=UTC), 100)
+        if record["event_type"] == "deployment"
+        and record["payload"]["occurred_at"] == "2026-08-09T12:01:00+00:00"
+    ]
+    assert any(
+        event["version"] == "v1"
+        and event["status"] == "stopped"
+        and event["traffic_percentage"] == 0
+        for event in deployment_events
+    )
+    assert any(
+        event["version"] == "v0"
+        and event["status"] == "active"
+        and event["traffic_percentage"] == 100
+        for event in deployment_events
+    )
 
 
 class FakeDeploymentGitHub:

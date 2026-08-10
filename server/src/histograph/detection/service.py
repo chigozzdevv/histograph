@@ -122,6 +122,39 @@ class MonitorEvaluationService:
             )
         return EvaluationOutcome(monitor=monitor, result=result, incident_id=incident_id)
 
+    def evaluate_recovery(
+        self,
+        monitor_id: UUID,
+        recovery_version: str,
+        not_before: datetime,
+        as_of: datetime,
+        baseline_value: float,
+    ) -> EvaluationOutcome:
+        """Evaluate labeled recovery traffic without reopening or mutating an incident."""
+        record = self._monitors.get(monitor_id)
+        if record is None:
+            raise LookupError("Monitor not found")
+        monitor = _monitor_from_record(
+            record,
+            feature=record.get("feature"),
+            reference_version=record.get("reference_version"),
+        )
+        if not monitor.enabled:
+            raise ValueError("Monitor is disabled")
+        if monitor.signal != "performance":
+            raise MonitorSignalMismatch(
+                "Fresh model recovery evidence requires a performance monitor"
+            )
+        result = self._engine.evaluate_recovery_performance(
+            monitor,
+            self._model(monitor.model),
+            recovery_version,
+            baseline_value,
+            not_before,
+            as_of,
+        )
+        return EvaluationOutcome(monitor=monitor, result=result, incident_id=None)
+
     def _resolve_version(self, monitor: Monitor) -> Monitor:
         if monitor.version is not None:
             return monitor

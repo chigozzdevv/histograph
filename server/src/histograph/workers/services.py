@@ -98,6 +98,13 @@ class ActionStore(Protocol):
 
 
 class DeploymentStateStore(Protocol):
+    def active_versions(
+        self,
+        model: str,
+        environment: str = "production",
+        deployment: str | None = None,
+    ) -> list[dict[str, Any]]: ...
+
     def latest_state(
         self,
         model: str,
@@ -121,6 +128,15 @@ class EvaluationService(Protocol):
         reference_version: str | None = None,
         expected_signal: Literal["performance", "feature_drift"] | None = None,
         persist: bool = True,
+    ) -> EvaluationOutcome: ...
+
+    def evaluate_recovery(
+        self,
+        monitor_id: UUID,
+        recovery_version: str,
+        not_before: datetime,
+        as_of: datetime,
+        baseline_value: float,
     ) -> EvaluationOutcome: ...
 
 
@@ -314,6 +330,32 @@ class RecoveryEvaluator:
                     },
                 }
             )
+            monitor_id = incident.get("monitor_id")
+            if not isinstance(monitor_id, UUID):
+                raise ValueError("Incident is not linked to a monitor")
+            applied_at = _timestamp(state.get("occurred_at"))
+            if applied_at is None:
+                raise ValueError("Recovered deployment state has no valid timestamp")
+            outcome = self._evaluation.evaluate_recovery(
+                monitor_id,
+                (
+                    _recovery_version(incident)
+                    if action["action_type"] == "stop_canary"
+                    else self._rolled_back_model_version(target, applied_at)
+                ),
+                applied_at,
+                ensure_utc(now),
+                _incident_baseline(incident),
+            )
+            if outcome.result.status != "evaluated" or outcome.result.triggered:
+                return None
+            checks.append(
+                {
+                    "name": "fresh_performance_window_passed",
+                    "passed": True,
+                    "details": outcome.as_dict(),
+                }
+            )
         elif action["action_type"] == "rollback_release":
             asset_urn = target.get("asset_urn")
             if not isinstance(asset_urn, str):
@@ -369,6 +411,31 @@ class RecoveryEvaluator:
             _environment(target),
             deployment if isinstance(deployment, str) else None,
         )
+
+    def _rolled_back_model_version(self, target: dict[str, Any], applied_at: datetime) -> str:
+        model = target.get("model")
+        if not isinstance(model, str):
+            raise ValueError("Model remediation target requires a model")
+        deployment = target.get("deployment")
+        active = self._deployments.active_versions(
+            model,
+            _environment(target),
+            deployment if isinstance(deployment, str) else None,
+        )
+        versions: set[str] = set()
+        for record in active:
+            version = record.get("version")
+            occurred_at = _timestamp(record.get("occurred_at"))
+            if (
+                isinstance(version, str)
+                and version != target.get("version")
+                and occurred_at is not None
+                and occurred_at >= applied_at
+            ):
+                versions.add(version)
+        if len(versions) != 1:
+            raise ValueError("Recovered deployment does not identify one active rollback version")
+        return versions.pop()
 
 
 class RecoveryWorker:
@@ -525,6 +592,25 @@ def _state_follows_execution(action: dict[str, Any], state: dict[str, Any]) -> b
         and state_occurred_at is not None
         and state_occurred_at >= execution_started_at
     )
+
+
+def _recovery_version(incident: dict[str, Any]) -> str:
+    evidence = incident.get("evidence")
+    detection = evidence.get("detection") if isinstance(evidence, dict) else None
+    reference = detection.get("reference") if isinstance(detection, dict) else None
+    version = reference.get("version") if isinstance(reference, dict) else None
+    if not isinstance(version, str) or not version:
+        raise ValueError("Incident does not identify the healthy reference version")
+    return version
+
+
+def _incident_baseline(incident: dict[str, Any]) -> float:
+    evidence = incident.get("evidence")
+    trigger = evidence.get("trigger") if isinstance(evidence, dict) else None
+    value = trigger.get("baseline_value") if isinstance(trigger, dict) else None
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        raise ValueError("Incident does not contain a numeric performance baseline")
+    return float(value)
 
 
 def _timestamp(value: Any) -> datetime | None:

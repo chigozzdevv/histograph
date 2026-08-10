@@ -317,6 +317,68 @@ class DetectionEngine:
         )
         return result, event
 
+    def evaluate_recovery_performance(
+        self,
+        monitor: Monitor,
+        model: ModelDefinition,
+        recovery_version: str,
+        baseline_value: float,
+        not_before: datetime,
+        as_of: datetime,
+    ) -> DetectionResult:
+        """Evaluate only labeled traffic observed after remediation was applied."""
+        if not monitor.enabled:
+            raise ValueError("Disabled monitors cannot be evaluated")
+        if monitor.signal != "performance":
+            raise ValueError("Recovery performance requires a performance monitor")
+        if model.name != monitor.model:
+            raise ValueError("Monitor model does not match the registered model definition")
+        start = ensure_utc(not_before)
+        end = ensure_utc(as_of)
+        if end <= start:
+            raise ValueError("Recovery evaluation must end after remediation was applied")
+
+        pairs = self._telemetry.binary_pairs(
+            monitor.model,
+            recovery_version,
+            start,
+            end,
+            model.positive_class,
+            model.positive_actual,
+        )
+        metrics = calculate_binary_metrics(pairs)
+        observed = self._metric_value(metrics, monitor.metric)
+        sufficient_data = len(pairs) >= monitor.minimum_sample_size and observed is not None
+        triggered = (
+            sufficient_data
+            and observed is not None
+            and _matches(monitor.operator, observed, monitor.threshold, baseline_value)
+        )
+        comparison = _comparison(monitor.metric, baseline_value, observed)
+        return DetectionResult(
+            status="evaluated" if sufficient_data else "insufficient_data",
+            triggered=triggered,
+            metric=monitor.metric,
+            observed_value=observed,
+            baseline_value=baseline_value,
+            threshold=monitor.threshold,
+            sample_size=len(pairs),
+            comparison=comparison,
+            evidence={
+                "comparison_type": "post_remediation_version_against_incident_baseline",
+                "window": {"start": start.isoformat(), "end": end.isoformat()},
+                "recovery": {
+                    "version": recovery_version,
+                    "metrics": self._metrics_dict(metrics),
+                },
+                "incident_baseline": {
+                    "metric": monitor.metric,
+                    "value": baseline_value,
+                },
+                "comparison": comparison,
+            },
+        )
+
     @staticmethod
     def _metric_value(metrics: BinaryMetrics, metric: str) -> float | None:
         value = getattr(metrics, metric, None)

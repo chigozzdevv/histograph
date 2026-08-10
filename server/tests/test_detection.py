@@ -193,3 +193,51 @@ def test_canary_performance_compares_candidate_and_reference_in_the_same_window(
     assert result.evidence["reference"]["version"] == "v1"
     assert result.evidence["candidate"]["version"] == "v2"
     assert event is not None
+
+
+def test_recovery_performance_uses_only_fresh_labeled_traffic() -> None:
+    monitor = Monitor(
+        model="fraud",
+        version="v2",
+        reference_version="v1",
+        signal="performance",
+        metric="recall",
+        operator="decrease",
+        threshold=0.2,
+        minimum_sample_size=4,
+    )
+    model = ModelDefinition(
+        name="fraud",
+        task="binary_classification",
+        positive_class="blocked",
+        positive_actual="chargeback",
+    )
+    insufficient = DetectionEngine(
+        FakeTelemetry(binary_windows=[[(True, True), (False, False), (False, False)]])
+    ).evaluate_recovery_performance(
+        monitor,
+        model,
+        "v1",
+        1.0,
+        datetime(2026, 8, 8, 11, 59, tzinfo=UTC),
+        datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+    )
+    healthy = DetectionEngine(
+        FakeTelemetry(binary_windows=[[(True, True), (True, True), (False, False), (False, False)]])
+    ).evaluate_recovery_performance(
+        monitor,
+        model,
+        "v1",
+        1.0,
+        datetime(2026, 8, 8, 11, 59, tzinfo=UTC),
+        datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+    )
+
+    assert insufficient.status == "insufficient_data"
+    assert insufficient.triggered is False
+    assert healthy.status == "evaluated"
+    assert healthy.triggered is False
+    assert healthy.evidence["comparison_type"] == (
+        "post_remediation_version_against_incident_baseline"
+    )
+    assert healthy.evidence["recovery"]["version"] == "v1"

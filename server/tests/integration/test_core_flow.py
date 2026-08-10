@@ -638,6 +638,43 @@ def test_continuous_worker_runs_detection_approval_execution_and_verified_recove
             ).status_code
             == 202
         )
+        recovery_predictions = []
+        recovery_actuals = []
+        for index, (predicted_class, actual) in enumerate(
+            zip(
+                ["blocked", "blocked", "allowed", "allowed"],
+                labels,
+                strict=True,
+            )
+        ):
+            prediction_id = f"worker-recovery-v1-{index}"
+            recovery_predictions.append(
+                {
+                    "prediction_id": prediction_id,
+                    "model": "fraud-worker",
+                    "version": "v1",
+                    "deployment": "fraud-worker-production",
+                    "observed_at": f"2026-08-09T12:03:0{index}Z",
+                    "predicted_class": predicted_class,
+                }
+            )
+            recovery_actuals.append(
+                {
+                    "prediction_id": prediction_id,
+                    "actual": actual,
+                    "observed_at": f"2026-08-09T12:03:1{index}Z",
+                }
+            )
+        assert (
+            client.post(
+                "/v1/events/predictions/batch", json={"events": recovery_predictions}
+            ).status_code
+            == 202
+        )
+        assert (
+            client.post("/v1/events/actuals/batch", json={"events": recovery_actuals}).status_code
+            == 202
+        )
         recovery_worker = RecoveryWorker(
             "integration-recovery",
             app.state.remediation,
@@ -660,6 +697,11 @@ def test_continuous_worker_runs_detection_approval_execution_and_verified_recove
         assert incident["evidence"]["root_cause_status"] == "confirmed_cause"
         assert action["recovery_verified_at"] == "2026-08-09T12:05:00Z"
         assert action["approval"]["actor_id"] == "risk-lead@example.com"
+        assert [check["name"] for check in incident["evidence"]["recovery"]["checks"]] == [
+            "approved_action_execution_succeeded",
+            "released_version_traffic_removed",
+            "fresh_performance_window_passed",
+        ]
         assert [event["event_type"] for event in action["timeline"]] == [
             "proposed",
             "approved",
@@ -892,6 +934,39 @@ def test_client_read_models_and_durable_demo_queue_use_the_imported_contract(
         assert not app.state.rate_limits.consume(
             "integration-playground", "test-client", limit=2, window_seconds=60
         )
+        with app.state.database.connection() as database_connection:
+            database_connection.execute(
+                """
+                UPDATE demo_runs
+                SET status = 'running', stage = 'verifying'
+                WHERE id = %s
+                """,
+                (run_id,),
+            )
+            database_connection.commit()
+        claimed_recovery = app.state.demo_runs.claim_recovery_ready(
+            "integration-demo-worker",
+            datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+            10,
+            60,
+        )
+        assert [str(item["id"]) for item in claimed_recovery] == [run_id]
+        assert (
+            app.state.demo_runs.claim_recovery_ready(
+                "another-worker",
+                datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+                10,
+                60,
+            )
+            == []
+        )
+        app.state.demo_runs.mark_recovery_emitted(
+            UUID(run_id),
+            {"status": "fresh_recovery_evidence_emitted", "routing_counts": {"v1": 1000}},
+        )
+        persisted_run = app.state.demo_runs.get(UUID(run_id))
+        assert persisted_run is not None
+        assert persisted_run["result"]["recovery_traffic"]["routing_counts"] == {"v1": 1000}
         with app.state.database.connection() as database_connection:
             database_connection.execute(
                 """
@@ -1193,6 +1268,28 @@ def test_gitops_pr_merge_drives_execution_and_independently_verified_recovery(
         assert deployed.status_code == 202
         assert deployed.json()["status"] == "succeeded"
 
+        recovery_prediction_requests = [
+            PredictionRequest(
+                prediction_id=f"gitops-recovery-{index}",
+                features={"amount": 0.9 if index % 2 == 0 else 0.1},
+                observed_at=datetime(2026, 8, 9, 12, 3, 30, tzinfo=UTC),
+            )
+            for index in range(40)
+        ]
+        recovery_predictions = reference_runtime.predict_many(recovery_prediction_requests)
+        assert {prediction.version for prediction in recovery_predictions} == {"v1"}
+        reference_runtime.record_outcomes(
+            [
+                OutcomeRequest(
+                    prediction_id=prediction.prediction_id,
+                    actual="chargeback" if index % 2 == 0 else "legitimate",
+                    observed_at=datetime(2026, 8, 9, 12, 4, tzinfo=UTC),
+                )
+                for index, prediction in enumerate(recovery_predictions)
+            ]
+        )
+        assert asyncio.run(telemetry_worker.run_once(datetime(2030, 8, 9, tzinfo=UTC))) == 2
+
         recovery_worker = RecoveryWorker(
             "gitops-recovery",
             app.state.remediation,
@@ -1223,6 +1320,11 @@ def test_gitops_pr_merge_drives_execution_and_independently_verified_recovery(
         )
         assert final_incident["status"] == "resolved"
         assert final_incident["evidence"]["root_cause_status"] == "confirmed_cause"
+        assert [check["name"] for check in final_incident["evidence"]["recovery"]["checks"]] == [
+            "approved_action_execution_succeeded",
+            "released_version_traffic_removed",
+            "fresh_performance_window_passed",
+        ]
         assert final_deployment["desired_revision"] == "merge-sha"
         assert final_deployment["sync_status"] == "in_sync"
         completed_run = app.state.demo_runs.refresh(demo_run_id)
