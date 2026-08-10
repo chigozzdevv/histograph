@@ -104,6 +104,66 @@ class DemoRunRepository:
             )
             connection.commit()
 
+    def claim_recovery_ready(
+        self,
+        worker_id: str,
+        now: datetime,
+        limit: int,
+        lease_seconds: int,
+    ) -> list[dict[str, Any]]:
+        timestamp = ensure_utc(now)
+        lease_until = timestamp + timedelta(seconds=lease_seconds)
+        with self._database.connection() as connection:
+            records = list(
+                connection.execute(
+                    """
+                    WITH candidates AS (
+                        SELECT id FROM demo_runs
+                        WHERE status = 'running'
+                          AND stage = 'verifying'
+                          AND NOT (COALESCE(result, '{}'::jsonb) ? 'recovery_traffic')
+                          AND (lease_expires_at IS NULL OR lease_expires_at <= %s)
+                        ORDER BY created_at
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT %s
+                    )
+                    UPDATE demo_runs AS runs
+                    SET stage = 'emitting_recovery_traffic',
+                        lease_owner = %s, lease_expires_at = %s, updated_at = NOW(),
+                        last_error = NULL
+                    FROM candidates
+                    WHERE runs.id = candidates.id
+                    RETURNING runs.*
+                    """,
+                    (timestamp, limit, worker_id, lease_until),
+                ).fetchall()
+            )
+            connection.commit()
+            return records
+
+    def mark_recovery_emitted(self, run_id: UUID, result: dict[str, Any]) -> None:
+        with self._database.connection() as connection:
+            current = connection.execute(
+                "SELECT result FROM demo_runs WHERE id = %s FOR UPDATE", (run_id,)
+            ).fetchone()
+            if current is None:
+                raise LookupError("Demo scenario not found")
+            existing = current.get("result")
+            combined = {
+                **(existing if isinstance(existing, dict) else {}),
+                "recovery_traffic": result,
+            }
+            connection.execute(
+                """
+                UPDATE demo_runs
+                SET stage = 'verifying', result = %s,
+                    lease_owner = NULL, lease_expires_at = NULL, updated_at = NOW()
+                WHERE id = %s
+                """,
+                (Jsonb(combined), run_id),
+            )
+            connection.commit()
+
     def fail(self, run_id: UUID, error: str) -> None:
         with self._database.connection() as connection:
             connection.execute(

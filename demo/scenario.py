@@ -613,6 +613,91 @@ def emit_runtime_canary_traffic(
     }
 
 
+def emit_runtime_recovery_traffic(
+    runtime_url: str,
+    prepared_path: Path,
+    artifact_path: Path,
+    *,
+    sample_size: int = 1000,
+    outbox_wait_seconds: float = 30,
+) -> dict[str, Any]:
+    """Replay labeled traffic only after the runtime has removed the candidate."""
+    from histograph.integrations.github.types import ModelDeploymentManifest
+
+    artifact = _load_artifact(artifact_path)
+    frame = _load_replay_frame(prepared_path, artifact["manifest"], sample_size)
+    runtime = HistographApi(runtime_url)
+    try:
+        state = runtime.get("/v1/runtime")
+        if state.get("status") != "ready" or not isinstance(state.get("manifest"), dict):
+            raise RuntimeError("Reference runtime has no applied deployment manifest")
+        manifest = ModelDeploymentManifest.model_validate(state["manifest"])
+        candidate = manifest.spec.candidate
+        if candidate is not None and candidate.traffic_percentage > 0:
+            raise RuntimeError("Candidate traffic must be zero before recovery replay")
+        if manifest.spec.stable.traffic_percentage != 100:
+            raise RuntimeError("Stable release must receive 100% traffic during recovery replay")
+
+        applied_at = datetime.fromisoformat(str(state["applied_at"]).replace("Z", "+00:00"))
+        observed_at = max(
+            datetime.now(UTC).replace(microsecond=0),
+            applied_at + timedelta(seconds=1),
+        )
+        prediction_requests = []
+        labels: dict[str, int] = {}
+        for _, row in frame.iterrows():
+            prediction_id = f"runtime-recovery-{uuid4().hex}"
+            prediction_requests.append(
+                {
+                    "prediction_id": prediction_id,
+                    "features": {feature: _scalar(row[feature]) for feature in FEATURES},
+                    "observed_at": observed_at.isoformat(),
+                }
+            )
+            labels[prediction_id] = int(row["is_fraud"])
+
+        responses: list[dict[str, Any]] = []
+        for batch in _batches(prediction_requests):
+            result = runtime.post("/v1/predict/batch", {"events": batch})
+            events = result.get("events")
+            if not isinstance(events, list) or not all(isinstance(item, dict) for item in events):
+                raise RuntimeError("Reference runtime returned an invalid recovery batch")
+            responses.extend(events)
+        counts: dict[str, int] = {}
+        for prediction in responses:
+            version = str(prediction["version"])
+            counts[version] = counts.get(version, 0) + 1
+        if counts != {manifest.spec.stable.version: sample_size}:
+            raise RuntimeError(
+                f"Recovery replay was not routed entirely to the stable release: {counts}"
+            )
+
+        outcomes_at = observed_at + timedelta(seconds=1)
+        outcomes = [
+            {
+                "prediction_id": prediction["prediction_id"],
+                "actual": labels[str(prediction["prediction_id"])],
+                "observed_at": outcomes_at.isoformat(),
+                "metadata": {"source": "gitops_runtime_recovery_demo"},
+            }
+            for prediction in responses
+        ]
+        for batch in _batches(outcomes):
+            runtime.post("/v1/outcomes/batch", {"events": batch})
+        _wait_for_outbox(runtime, outbox_wait_seconds)
+    finally:
+        runtime.close()
+    return {
+        "status": "fresh_recovery_evidence_emitted",
+        "revision": state["revision"],
+        "deployment": manifest.metadata.name,
+        "model": manifest.spec.model.name,
+        "routing_counts": counts,
+        "observed_at": observed_at.isoformat(),
+        "outcomes_at": outcomes_at.isoformat(),
+    }
+
+
 def _load_artifact(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Model artifact not found: {path}")

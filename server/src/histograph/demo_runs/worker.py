@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from demo.scenario import emit_runtime_canary_traffic
+from demo.scenario import emit_runtime_canary_traffic, emit_runtime_recovery_traffic
 
 from histograph.settings import Settings
 
@@ -15,15 +15,23 @@ class DemoRunStore(Protocol):
         self, worker_id: str, now: datetime, limit: int, lease_seconds: int
     ) -> list[dict[str, Any]]: ...
 
+    def claim_recovery_ready(
+        self, worker_id: str, now: datetime, limit: int, lease_seconds: int
+    ) -> list[dict[str, Any]]: ...
+
     def refresh(self, run_id: UUID) -> dict[str, Any] | None: ...
 
     def mark_emitted(self, run_id: UUID, monitor_id: UUID, result: dict[str, Any]) -> None: ...
+
+    def mark_recovery_emitted(self, run_id: UUID, result: dict[str, Any]) -> None: ...
 
     def fail(self, run_id: UUID, error: str) -> None: ...
 
 
 class DemoRunExecutor(Protocol):
     async def emit(self) -> dict[str, Any]: ...
+
+    async def emit_recovery(self) -> dict[str, Any]: ...
 
 
 class ReferenceDemoExecutor:
@@ -34,6 +42,16 @@ class ReferenceDemoExecutor:
         return await asyncio.to_thread(
             emit_runtime_canary_traffic,
             self._settings.demo_api_url,
+            self._settings.demo_runtime_url,
+            self._settings.demo_replay_path,
+            self._settings.demo_artifact_path,
+            sample_size=self._settings.demo_sample_size,
+            outbox_wait_seconds=self._settings.demo_outbox_wait_seconds,
+        )
+
+    async def emit_recovery(self) -> dict[str, Any]:
+        return await asyncio.to_thread(
+            emit_runtime_recovery_traffic,
             self._settings.demo_runtime_url,
             self._settings.demo_replay_path,
             self._settings.demo_artifact_path,
@@ -70,4 +88,13 @@ class DemoRunWorker:
                 self._runs.mark_emitted(run["id"], UUID(str(result["monitor_id"])), result)
             except Exception as error:
                 self._runs.fail(run["id"], str(error))
-        return len(records)
+        recovery_records = self._runs.claim_recovery_ready(
+            self._worker_id, now, self._batch_size, self._lease_seconds
+        )
+        for run in recovery_records:
+            try:
+                result = await self._executor.emit_recovery()
+                self._runs.mark_recovery_emitted(run["id"], result)
+            except Exception as error:
+                self._runs.fail(run["id"], str(error))
+        return len(records) + len(recovery_records)

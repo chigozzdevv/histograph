@@ -70,11 +70,14 @@ monitor requires a minimum sample size before it can trigger an incident.
 
 An investigation reads the model entity and both directions of its DataHub lineage through MCP, records the exact tool trace and lineage evidence on the incident, and keeps the incident open until a dependency change is corroborated. Set `HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED=true` and pass `write_back: true` only when the team has approved saving the investigation as a DataHub analysis document.
 
-An incident can enter `resolved` only after persisted recovery evidence contains at least one passed
-verification check. Adapter success alone is not recovery. A stopped canary requires a later
-deployment event showing zero candidate traffic; an upstream rollback requires a rollback change
-event and a fresh healthy monitor window. A responsible engineer can instead set the incident to
-`closed`, but manual closure requires a reason and is recorded separately in the timeline.
+An incident can enter `resolved` only after persisted recovery evidence contains the action result,
+independent runtime state, and fresh health proof required for that action. Adapter success alone is
+not recovery. A stopped canary requires a later deployment event showing zero candidate traffic and
+a fresh labeled performance window for the stable version; a full model rollback requires the old
+version to stop plus fresh labeled traffic on the declared rollback version; an upstream rollback
+requires a rollback change event and a fresh healthy monitor window. A responsible engineer can
+instead set the incident to `closed`, but manual closure requires a reason and is recorded separately
+in the timeline.
 
 ## Approval-driven remediation
 
@@ -247,7 +250,7 @@ execution, and recovery records through these stages:
 
 ```text
 queued → emitting_traffic → monitoring → investigating → awaiting_approval
-       → remediating → verifying → resolved
+       → remediating → emitting_recovery_traffic → verifying → resolved
 ```
 
 Use `GET /v1/demo/scenarios/{run_id}` to poll progress. Only one run can be active, including across
@@ -255,6 +258,11 @@ worker replicas. By default, starting and resetting a run require
 `Authorization: Bearer $HISTOGRAPH_DEMO_CONTROL_TOKEN`. A hosted self-service environment may set
 `HISTOGRAPH_DEMO_PUBLIC_SCENARIOS_ENABLED=true`; the database-level single-run guard still applies.
 Public starts also use a separate hourly per-client rate limit.
+
+After the reconciler removes candidate traffic, the durable demo worker replays labeled held-out
+rows through the recovered runtime. Recovery remains pending until the stable version has enough
+strictly post-remediation prediction/outcome pairs and its performance passes against the incident's
+original same-window reference value.
 
 After recovery is verified, `POST /v1/demo/scenarios/{run_id}/reset` opens an idempotent GitHub PR
 that restores the exact pre-scenario canary manifest. It never rewrites Git state or serving state
