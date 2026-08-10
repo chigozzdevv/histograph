@@ -777,8 +777,11 @@ class ContractGitHubClient:
         revision: str | None = None,
     ) -> GitHubRepositoryFile:
         assert revision in {None, "contract-sha"}
+        content = (self.root / path).read_text()
+        if path == ".histograph/deployments/mobile-money-fraud.yaml":
+            content = yaml.safe_dump(_active_contract_manifest(self.root), sort_keys=False)
         return GitHubRepositoryFile(
-            content=(self.root / path).read_text(),
+            content=content,
             blob_sha=f"blob-{path}",
             revision=revision or "contract-sha",
         )
@@ -803,16 +806,22 @@ class ContractRuntimeConnector(RuntimeConnector):
 
     async def state(self, deployment: dict[str, Any]) -> dict[str, Any]:
         assert deployment["deployment"] == "mobile-money-fraud-production"
-        manifest = yaml.safe_load(
-            (self.root / ".histograph/deployments/mobile-money-fraud.yaml").read_text()
-        )
         return {
             "status": "ready",
             "revision": "contract-sha",
-            "manifest": manifest,
+            "manifest": _active_contract_manifest(self.root),
             "applied_at": "2026-08-10T11:10:20Z",
             "outbox_pending": 0,
         }
+
+
+def _active_contract_manifest(root: Path) -> dict[str, Any]:
+    manifest = yaml.safe_load(
+        (root / ".histograph/deployments/mobile-money-fraud.yaml").read_text()
+    )
+    manifest["spec"]["stable"]["trafficPercentage"] = 90
+    manifest["spec"]["candidate"]["trafficPercentage"] = 10
+    return manifest
 
 
 def test_client_read_models_and_durable_demo_queue_use_the_imported_contract(
