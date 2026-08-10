@@ -78,6 +78,26 @@ async def test_runtime_connector_validates_inputs_and_keeps_compare_out_of_telem
         await connector.predict(_deployment("http://169.254.169.254"), features)
 
 
+@pytest.mark.parametrize(
+    ("features", "message"),
+    [
+        ({"amount": 10}, "required property"),
+        ({"amount": -1, "transaction_type": "PAYMENT"}, "less than the minimum of 0"),
+        ({"amount": 10, "transaction_type": "CASH"}, "is not one of"),
+        (
+            {"amount": 10, "transaction_type": "PAYMENT", "unexpected": True},
+            "Additional properties are not allowed",
+        ),
+    ],
+)
+def test_runtime_connector_rejects_inputs_outside_deployment_schema(
+    features: dict[str, Any],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        RuntimeConnector.validate_input(_deployment(), features)
+
+
 class FakeGitOps:
     def __init__(self) -> None:
         self.deployment = _deployment()
@@ -102,9 +122,11 @@ class FakeProduct:
 
 class FakeRuntimeConnector:
     async def predict(self, deployment, features):
+        RuntimeConnector.validate_input(deployment, features)
         return {"version": "v1", "features": features}
 
     async def compare(self, deployment, features):
+        RuntimeConnector.validate_input(deployment, features)
         return {"stable": {"version": "v1"}, "candidate": {"version": "v2"}}
 
 
@@ -142,6 +164,12 @@ def test_product_routes_are_client_ready_and_do_not_expose_connection_secrets() 
             json={"input": {"amount": 10, "transaction_type": "PAYMENT"}},
         )
         assert compared.json()["telemetry_recorded"] is False
+        invalid = client.post(
+            f"/v1/deployments/{deployment_id}/predict",
+            json={"input": {"amount": -1, "transaction_type": "PAYMENT"}},
+        )
+        assert invalid.status_code == 422
+        assert "less than the minimum of 0" in invalid.json()["detail"]
         assert client.get("/v1/activity?limit=7").json()[0]["limit"] == 7
         app.state.rate_limits.allowed = False
         limited = client.post(
