@@ -10,6 +10,8 @@ function formatEvent(event: ActivityItem) {
     approved: "Remediation approved",
     execution_succeeded: "Execution succeeded",
     recovery_verified: "Recovery verified",
+    scenario_resolved: "Controlled scenario completed",
+    scenario_failed: "Controlled scenario failed",
   };
 
   return names[event.event_type] ?? event.event_type.replaceAll("_", " ");

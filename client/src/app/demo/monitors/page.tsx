@@ -73,7 +73,11 @@ export default async function MonitorsPage() {
             const state = monitorState(monitor);
 
             return (
-              <article className="border-b border-white/7 px-5 py-5 last:border-b-0 sm:px-6" key={monitor.id}>
+              <article
+                className="scroll-mt-24 border-b border-white/7 px-5 py-5 last:border-b-0 target:bg-white/[0.025] sm:px-6"
+                id={`monitor-${monitor.id}`}
+                key={monitor.id}
+              >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-white/82">

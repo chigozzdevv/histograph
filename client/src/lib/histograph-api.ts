@@ -10,6 +10,44 @@ export type JsonValue =
 
 export type JsonObject = { [key: string]: JsonValue };
 
+export type DemoScenarioTraffic = {
+  status?: string;
+  deployment?: string;
+  model?: string;
+  revision?: string;
+  routing_counts?: Record<string, number>;
+  outcome_count?: number;
+  monitor_id?: string;
+  observed_at?: string;
+  outcomes_at?: string;
+};
+
+export type DemoScenarioReset = {
+  status: string;
+  pull_request_number: number;
+  pull_request_url: string;
+  head_branch: string;
+};
+
+export type DemoScenarioRun = {
+  id: string;
+  deployment_id: string;
+  status: string;
+  stage: string;
+  monitor_id: string | null;
+  incident_id: string | null;
+  action_id: string | null;
+  result: {
+    traffic?: DemoScenarioTraffic;
+    recovery_traffic?: DemoScenarioTraffic;
+    reset?: DemoScenarioReset;
+  };
+  created_at: string;
+  updated_at: string;
+  finished_at: string | null;
+  last_error: string | null;
+};
+
 export type OverviewResponse = {
   counts: {
     deployments: number;
@@ -19,19 +57,7 @@ export type OverviewResponse = {
     github_connections: number;
   };
   latest_incident: Incident | null;
-  latest_demo_run: {
-    id: string;
-    deployment_id: string;
-    status: string;
-    stage: string;
-    monitor_id: string | null;
-    incident_id: string | null;
-    action_id: string | null;
-    created_at: string;
-    updated_at: string;
-    finished_at: string | null;
-    last_error: string | null;
-  } | null;
+  latest_demo_run: Omit<DemoScenarioRun, "result"> | null;
 };
 
 export type Deployment = {
@@ -109,6 +135,12 @@ export type Deployment = {
   repository_name?: string;
   branch?: string;
   manifest_path?: string;
+  source_links?: {
+    repository: string | null;
+    branch: string | null;
+    manifest: string | null;
+    datahub: string | null;
+  };
   created_at: string;
   updated_at: string;
 };
@@ -191,8 +223,47 @@ export type RemediationAction = {
   proposed_at: string;
   approved_at: string | null;
   execution_started_at: string | null;
-  execution_completed_at: string | null;
+  execution_finished_at: string | null;
+  recovery_verified_at: string | null;
   external_execution_id: string | null;
+};
+
+export type GitOpsPullRequest = {
+  status: string;
+  head_branch: string;
+  base_branch: string;
+  pull_request_number: number | null;
+  pull_request_url: string | null;
+  merge_sha: string | null;
+  approved_by: string | null;
+  merged_at: string | null;
+  last_error: string | null;
+};
+
+export type RemediationActionDetail = RemediationAction & {
+  approval: {
+    actor_id: string;
+    decision: string;
+    reason: string | null;
+    decided_at: string;
+  } | null;
+  pull_request: GitOpsPullRequest | null;
+  timeline: Array<{
+    id: string;
+    action_id: string;
+    event_type: string;
+    details: JsonObject;
+    created_at: string;
+  }>;
+};
+
+export type DemoScenarioSnapshot = {
+  run: DemoScenarioRun;
+  deployment: Deployment | null;
+  monitor: Monitor | null;
+  monitor_run: MonitorRun | null;
+  incident: IncidentDetail | null;
+  action: RemediationActionDetail | null;
 };
 
 export type PredictionResult = {
@@ -214,7 +285,7 @@ export type ComparisonResult = {
 
 export type ActivityItem = {
   id: string;
-  category: "deployment" | "change" | "incident" | "remediation";
+  category: "deployment" | "change" | "incident" | "remediation" | "demo_run";
   event_type: string;
   entity_id: string;
   details: Record<string, JsonValue>;
@@ -285,13 +356,18 @@ async function request<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function mutate<T>(path: string, body: JsonObject): Promise<T> {
+async function mutate<T>(
+  path: string,
+  body: JsonObject,
+  headers: Record<string, string> = {},
+): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     method: "POST",
     cache: "no-store",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...headers,
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(12_000),
@@ -303,6 +379,11 @@ async function mutate<T>(path: string, body: JsonObject): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function demoControlHeaders(): Record<string, string> {
+  const token = process.env.HISTOGRAPH_DEMO_CONTROL_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -334,6 +415,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     activity,
     integrations,
   };
+}
+
+export async function getOverview(): Promise<OverviewResponse> {
+  return request<OverviewResponse>("/v1/overview");
 }
 
 export async function getDeployments(): Promise<Deployment[]> {
@@ -374,6 +459,15 @@ export async function getMonitorRuns(monitorId: string, limit = 20): Promise<Mon
   return request<MonitorRun[]>(`/v1/monitors/${monitorId}/runs?limit=${limit}`);
 }
 
+export async function getMonitor(monitorId: string): Promise<Monitor | null> {
+  try {
+    return await request<Monitor>(`/v1/monitors/${monitorId}`);
+  } catch (error) {
+    if (error instanceof HistographApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
 export async function getActivity(): Promise<ActivityItem[]> {
   return request<ActivityItem[]>("/v1/activity?limit=100");
 }
@@ -391,4 +485,62 @@ export async function runPlayground(
     `/v1/deployments/${deploymentId}/${mode}`,
     { input },
   );
+}
+
+export async function startDemoScenario(deploymentId: string): Promise<DemoScenarioRun> {
+  return mutate<DemoScenarioRun>(
+    "/v1/demo/scenarios",
+    { deployment_id: deploymentId },
+    demoControlHeaders(),
+  );
+}
+
+export async function resetDemoScenario(runId: string): Promise<DemoScenarioReset> {
+  return mutate<DemoScenarioReset>(
+    `/v1/demo/scenarios/${runId}/reset`,
+    {},
+    demoControlHeaders(),
+  );
+}
+
+export async function getDemoScenario(runId: string): Promise<DemoScenarioRun | null> {
+  try {
+    return await request<DemoScenarioRun>(`/v1/demo/scenarios/${runId}`);
+  } catch (error) {
+    if (error instanceof HistographApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function getAction(actionId: string): Promise<RemediationActionDetail | null> {
+  try {
+    return await request<RemediationActionDetail>(`/v1/actions/${actionId}`);
+  } catch (error) {
+    if (error instanceof HistographApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function getDemoScenarioSnapshot(
+  runId: string,
+): Promise<DemoScenarioSnapshot | null> {
+  const run = await getDemoScenario(runId);
+  if (!run) return null;
+
+  const [deployment, monitor, incident, action] = await Promise.all([
+    getDeployment(run.deployment_id),
+    run.monitor_id ? getMonitor(run.monitor_id) : Promise.resolve(null),
+    run.incident_id ? getIncident(run.incident_id) : Promise.resolve(null),
+    run.action_id ? getAction(run.action_id) : Promise.resolve(null),
+  ]);
+  const monitorRuns = run.monitor_id ? await getMonitorRuns(run.monitor_id, 1) : [];
+
+  return {
+    run,
+    deployment,
+    monitor,
+    monitor_run: monitorRuns[0] ?? null,
+    incident,
+    action,
+  };
 }

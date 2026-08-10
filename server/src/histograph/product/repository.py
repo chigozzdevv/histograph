@@ -90,6 +90,23 @@ class ProductRepository:
                                ),
                                changes.occurred_at
                         FROM changes
+                        UNION ALL
+                        SELECT demo_runs.id,
+                               'demo_run'::text,
+                               CASE
+                                   WHEN demo_runs.status = 'resolved'
+                                       THEN 'scenario_resolved'::text
+                                   ELSE 'scenario_failed'::text
+                               END,
+                               demo_runs.id,
+                               jsonb_build_object(
+                                   'deployment_id', demo_runs.deployment_id,
+                                   'status', demo_runs.status,
+                                   'stage', demo_runs.stage
+                               ),
+                               COALESCE(demo_runs.finished_at, demo_runs.updated_at)
+                        FROM demo_runs
+                        WHERE demo_runs.status IN ('resolved', 'failed')
                     ) AS activity
                     ORDER BY created_at DESC, id
                     LIMIT %s

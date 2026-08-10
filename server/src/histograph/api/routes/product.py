@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote, urlsplit
 from uuid import UUID
 
 import httpx
@@ -21,7 +22,10 @@ def overview(request: Request) -> dict[str, Any]:
 
 @router.get("/deployments")
 def list_deployments(request: Request) -> list[dict[str, Any]]:
-    return [_deployment_view(item) for item in request.app.state.gitops.list_deployments()]
+    return [
+        _deployment_view(item, request.app.state.settings)
+        for item in request.app.state.gitops.list_deployments()
+    ]
 
 
 @router.get("/deployments/{deployment_id}")
@@ -29,7 +33,7 @@ def get_deployment(deployment_id: UUID, request: Request) -> dict[str, Any]:
     deployment = request.app.state.gitops.get_deployment(deployment_id)
     if deployment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deployment not found")
-    return _deployment_view(deployment)
+    return _deployment_view(deployment, request.app.state.settings)
 
 
 @router.post("/deployments/{deployment_id}/predict")
@@ -111,7 +115,7 @@ async def _runtime_call(
         ) from error
 
 
-def _deployment_view(deployment: dict[str, Any]) -> dict[str, Any]:
+def _deployment_view(deployment: dict[str, Any], settings: Any) -> dict[str, Any]:
     allowed = {
         "id",
         "connection_id",
@@ -135,7 +139,56 @@ def _deployment_view(deployment: dict[str, Any]) -> dict[str, Any]:
         "created_at",
         "updated_at",
     }
-    return {key: value for key, value in deployment.items() if key in allowed}
+    return {
+        **{key: value for key, value in deployment.items() if key in allowed},
+        "source_links": _source_links(deployment, settings),
+    }
+
+
+def _source_links(deployment: dict[str, Any], settings: Any) -> dict[str, str | None]:
+    owner = deployment.get("repository_owner")
+    repository = deployment.get("repository_name")
+    revision = deployment.get("desired_revision") or deployment.get("branch")
+    manifest_path = deployment.get("manifest_path")
+    github_base = _github_frontend_url(getattr(settings, "github_api_url", None))
+
+    repository_url = None
+    branch_url = None
+    manifest_url = None
+    if github_base and isinstance(owner, str) and isinstance(repository, str):
+        repository_url = f"{github_base}/{quote(owner, safe='')}/{quote(repository, safe='')}"
+        branch = deployment.get("branch")
+        if isinstance(branch, str):
+            branch_url = f"{repository_url}/tree/{quote(branch, safe='')}"
+        if isinstance(revision, str) and isinstance(manifest_path, str):
+            manifest_url = (
+                f"{repository_url}/blob/{quote(revision, safe='')}/"
+                f"{quote(manifest_path.lstrip('/'), safe='/')}"
+            )
+
+    datahub_url = None
+    datahub_base = getattr(settings, "datahub_frontend_url", None)
+    model_urn = deployment.get("datahub_model_urn")
+    if datahub_base and isinstance(model_urn, str):
+        datahub_url = f"{str(datahub_base).rstrip('/')}/mlModels/{quote(model_urn, safe='')}"
+
+    return {
+        "repository": repository_url,
+        "branch": branch_url,
+        "manifest": manifest_url,
+        "datahub": datahub_url,
+    }
+
+
+def _github_frontend_url(api_url: str | None) -> str | None:
+    if not api_url:
+        return None
+    parsed = urlsplit(api_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if parsed.netloc == "api.github.com":
+        return "https://github.com"
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _consume_rate_limit(

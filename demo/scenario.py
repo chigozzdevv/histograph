@@ -607,6 +607,7 @@ def emit_runtime_canary_traffic(
         "model": manifest.spec.model.name,
         "revision": state["revision"],
         "routing_counts": counts,
+        "outcome_count": len(outcomes),
         "monitor_id": monitor["id"],
         "status": "awaiting_continuous_worker",
         "next": "The worker will detect, investigate, and open a rollback PR without manual calls.",
@@ -693,6 +694,7 @@ def emit_runtime_recovery_traffic(
         "deployment": manifest.metadata.name,
         "model": manifest.spec.model.name,
         "routing_counts": counts,
+        "outcome_count": len(outcomes),
         "observed_at": observed_at.isoformat(),
         "outcomes_at": outcomes_at.isoformat(),
     }

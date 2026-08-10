@@ -3,14 +3,6 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { DemoNavigation } from "@/components/demo/navigation";
 
-function EnvironmentControl({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex h-9 items-center border border-white/12 bg-white/[0.025] px-2.5 text-[13px] text-white sm:px-3 sm:text-sm">
-      {children}
-    </span>
-  );
-}
-
 export function DemoShell({
   children,
   environment,
@@ -48,8 +40,20 @@ export function DemoShell({
             aria-label="Current workspace and environment"
             className="ml-auto flex items-center gap-2"
           >
-            <EnvironmentControl>Demo</EnvironmentControl>
-            <EnvironmentControl>{environment}</EnvironmentControl>
+            <span
+              aria-current="page"
+              className="inline-flex h-9 items-center border border-brand/70 bg-brand/15 px-2.5 text-[13px] text-brand-soft sm:px-3 sm:text-sm"
+            >
+              Demo
+            </span>
+            <details className="group relative">
+              <summary className="inline-flex h-9 cursor-pointer list-none items-center border border-white/12 bg-white/[0.025] px-2.5 text-[13px] text-white outline-none transition-colors hover:border-white/24 focus-visible:border-brand/70 sm:px-3 sm:text-sm [&::-webkit-details-marker]:hidden">
+                {environment}
+              </summary>
+              <div className="absolute top-full right-0 z-40 mt-2 w-36 border border-white/12 bg-[#111] px-3 py-2.5 text-center text-xs text-white/58 shadow-2xl">
+                Coming soon
+              </div>
+            </details>
           </div>
         </header>
 

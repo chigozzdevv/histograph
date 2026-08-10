@@ -7,8 +7,12 @@ import {
   type PlaygroundActionState,
   type PlaygroundMode,
 } from "@/app/demo/playground/actions";
+import { ScenarioControl } from "@/components/demo/scenario-control";
+import { ScenarioRun } from "@/components/demo/scenario-run";
 import type {
   ComparisonResult,
+  DemoScenarioRun,
+  DemoScenarioSnapshot,
   Deployment,
   JsonObject,
   PredictionResult,
@@ -74,29 +78,15 @@ function PredictionCard({
 
 function ComparisonResultView({ result }: { result: ComparisonResult }) {
   return (
-    <div>
-      <div className="grid sm:grid-cols-2 sm:divide-x sm:divide-white/10">
-        <PredictionCard label="Stable" result={result.stable} />
-        <PredictionCard label="Candidate" result={result.candidate} tone="brand" />
-      </div>
-      <div className="flex items-center gap-2 border-t border-white/8 px-5 py-3 sm:px-6">
-        <span className="size-1.5 rounded-full bg-success" />
-        <p className="text-xs text-white/42">Comparison telemetry was not recorded.</p>
-      </div>
+    <div className="grid sm:grid-cols-2 sm:divide-x sm:divide-white/10">
+      <PredictionCard label="Stable" result={result.stable} />
+      <PredictionCard label="Candidate" result={result.candidate} tone="brand" />
     </div>
   );
 }
 
 function PredictionResultView({ result }: { result: PredictionResult }) {
-  return (
-    <div>
-      <PredictionCard label="Production route" result={result} tone="brand" />
-      <div className="flex items-center gap-2 border-t border-white/8 px-5 py-3 sm:px-6">
-        <span className="size-1.5 rounded-full bg-brand-soft" />
-        <p className="text-xs text-white/42">Prediction telemetry was submitted.</p>
-      </div>
-    </div>
-  );
+  return <PredictionCard label="Production route" result={result} tone="brand" />;
 }
 
 function EmptyResult({ mode }: { mode: PlaygroundMode }) {
@@ -116,9 +106,13 @@ function EmptyResult({ mode }: { mode: PlaygroundMode }) {
 export function Playground({
   deployments,
   initialDeploymentId,
+  initialScenario,
+  latestRun,
 }: {
   deployments: Deployment[];
   initialDeploymentId?: string;
+  initialScenario: DemoScenarioSnapshot | null;
+  latestRun: Omit<DemoScenarioRun, "result"> | null;
 }) {
   const initialDeployment =
     deployments.find((item) => item.id === initialDeploymentId) ?? deployments[0];
@@ -157,20 +151,21 @@ export function Playground({
   return (
     <div className="mx-auto w-full max-w-400 px-5 py-7 sm:px-7 sm:py-9 lg:px-9 lg:py-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-[1.65rem] leading-none font-normal tracking-[-0.035em] text-white">
-            Playground
-          </h1>
-          <p className="mt-2 text-sm text-white/38">
-            Compare release behavior with a real deployment input.
-          </p>
-        </div>
-        <p className="font-mono text-[10px] tracking-[0.12em] text-white/26 uppercase">
-          {deployment?.environment ?? "No deployment"}
-        </p>
+        <h1 className="text-[1.65rem] leading-none font-normal tracking-[-0.035em] text-white">
+          Playground
+        </h1>
+        <ScenarioControl
+          canStart={Boolean(candidate && candidate.trafficPercentage > 0)}
+          currentRunId={initialScenario?.run.id}
+          deploymentId={deployment?.id}
+          latestRun={latestRun}
+        />
       </div>
 
-      <div className="mt-7 overflow-hidden border border-white/10 bg-[#0a0a0a]">
+      {initialScenario ? (
+        <ScenarioRun initialSnapshot={initialScenario} />
+      ) : (
+        <div className="mt-7 overflow-hidden border border-white/10 bg-[#0a0a0a]">
         <div className="grid xl:grid-cols-[minmax(0,1.05fr)_minmax(24rem,0.95fr)]">
           <form
             action={formAction}
@@ -242,11 +237,6 @@ export function Playground({
                   );
                 })}
               </div>
-              <p className="mt-2 text-xs leading-5 text-white/34">
-                {mode === "compare"
-                  ? "Evaluates stable and candidate without recording telemetry."
-                  : "Uses production traffic routing and records prediction telemetry."}
-              </p>
             </fieldset>
 
             <label className="mt-6 block">
@@ -309,7 +299,8 @@ export function Playground({
             )}
           </section>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

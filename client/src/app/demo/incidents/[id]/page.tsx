@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ArrowUpRightIcon } from "@/components/demo/icons";
 import {
   EmptyReadOnlyState,
   formatUtc,
@@ -10,8 +11,14 @@ import {
   shortId,
 } from "@/components/demo/read-only-page";
 import { Status } from "@/components/demo/status";
-import type { IncidentDetail, JsonObject, JsonValue, RemediationAction } from "@/lib/histograph-api";
-import { getIncident, getIncidentActions } from "@/lib/histograph-api";
+import type {
+  IncidentDetail,
+  JsonObject,
+  JsonValue,
+  RemediationAction,
+  RemediationActionDetail,
+} from "@/lib/histograph-api";
+import { getAction, getIncident, getIncidentActions } from "@/lib/histograph-api";
 
 export const dynamic = "force-dynamic";
 
@@ -126,7 +133,10 @@ export default async function IncidentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [incident, actions] = await Promise.all([getIncident(id), getIncidentActions(id)]);
+  const [incident, recordedActions] = await Promise.all([getIncident(id), getIncidentActions(id)]);
+  const actions = (
+    await Promise.all(recordedActions.map((action) => getAction(action.id)))
+  ).filter((action): action is RemediationActionDetail => action !== null);
 
   if (!incident) {
     return (
@@ -218,7 +228,20 @@ export default async function IncidentDetailPage({
                       {shortId(action.id)} · {action.adapter} · proposed {formatUtc(action.proposed_at)}
                     </p>
                   </div>
-                  <Status label={actionState.label} tone={actionState.tone} />
+                  <div className="flex items-center gap-4">
+                    {action.pull_request?.pull_request_url ? (
+                      <a
+                        className="inline-flex items-center gap-1.5 text-xs text-white/46 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                        href={action.pull_request.pull_request_url}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        Review PR
+                        <ArrowUpRightIcon className="size-3.5" />
+                      </a>
+                    ) : null}
+                    <Status label={actionState.label} tone={actionState.tone} />
+                  </div>
                 </div>
                 {target.length > 0 ? (
                   <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2">

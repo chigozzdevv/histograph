@@ -33,6 +33,8 @@ const eventNames: Record<string, string> = {
   execution_failed: "Action execution failed",
   recovery_verified: "Recovery verified",
   status_changed: "Incident status changed",
+  scenario_resolved: "Controlled scenario completed",
+  scenario_failed: "Controlled scenario failed",
 };
 
 function eventName(item: ActivityItem) {
@@ -121,10 +123,17 @@ export default async function ActivityPage() {
               </>
             );
 
-            return item.category === "incident" ? (
+            const href =
+              item.category === "incident"
+                ? `/demo/incidents/${item.entity_id}`
+                : item.category === "demo_run"
+                  ? `/demo/playground?run=${item.entity_id}`
+                  : null;
+
+            return href ? (
               <Link
                 className="flex gap-3 border-b border-white/7 px-5 py-4 transition-colors last:border-b-0 hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand sm:px-6"
-                href={`/demo/incidents/${item.entity_id}`}
+                href={href}
                 key={item.id}
               >
                 {body}

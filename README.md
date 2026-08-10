@@ -290,7 +290,8 @@ Before starting the full GitOps services, configure:
   `HISTOGRAPH_GITHUB_WEBHOOK_SECRET`;
 - the reference installation ID, repository owner, and repository name;
 - independent GitHub configuration, runtime control, and demo control tokens;
-- the reachable DataHub GMS URL/token and whether explicit write-back is enabled.
+- the reachable DataHub GMS URL/token, browser-facing frontend URL, and whether explicit write-back
+  is enabled.
 
 No public demo visitor receives or enters those credentials.
 
@@ -333,6 +334,7 @@ Run `./infra/datahub/health.sh` to check GMS and the frontend. Stop the local Da
 
 ```bash
 export HISTOGRAPH_DATAHUB_GMS_URL=http://localhost:8080
+export HISTOGRAPH_DATAHUB_FRONTEND_URL=http://localhost:9002
 export HISTOGRAPH_DATAHUB_GMS_TOKEN=<token>
 export HISTOGRAPH_DATAHUB_MCP_COMMAND=uvx
 export HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub==0.6.0

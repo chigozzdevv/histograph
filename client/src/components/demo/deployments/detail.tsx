@@ -93,6 +93,23 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function SourceLink({ href, value }: { href: string | null | undefined; value: string }) {
+  if (!href) return value;
+
+  return (
+    <a
+      className="inline-flex max-w-full items-center gap-1.5 text-white/68 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      href={href}
+      rel="noopener noreferrer"
+      target="_blank"
+      title={value}
+    >
+      <span className="truncate">{value}</span>
+      <ArrowUpRightIcon className="size-3.5 shrink-0" />
+    </a>
+  );
+}
+
 export function DeploymentDetail({ deployment }: { deployment: Deployment }) {
   const spec = deployment.manifest.spec;
   const traffic = deploymentTraffic(deployment);
@@ -247,13 +264,45 @@ export function DeploymentDetail({ deployment }: { deployment: Deployment }) {
               <h2 className="text-sm font-medium text-white/78">Source</h2>
             </div>
             <div className="grid gap-6 border-t border-white/8 px-5 py-5 sm:grid-cols-2 sm:px-6">
-              <Fact label="Repository" value={source} />
-              <Fact label="Branch" value={deployment.branch ?? "—"} />
+              <Fact
+                label="Repository"
+                value={
+                  <SourceLink
+                    href={deployment.source_links?.repository}
+                    value={source}
+                  />
+                }
+              />
+              <Fact
+                label="Branch"
+                value={
+                  <SourceLink
+                    href={deployment.source_links?.branch}
+                    value={deployment.branch ?? "—"}
+                  />
+                }
+              />
               <div className="sm:col-span-2">
-                <Fact label="Manifest" value={deployment.manifest_path ?? "—"} />
+                <Fact
+                  label="Manifest"
+                  value={
+                    <SourceLink
+                      href={deployment.source_links?.manifest}
+                      value={deployment.manifest_path ?? "—"}
+                    />
+                  }
+                />
               </div>
               <div className="sm:col-span-2">
-                <Fact label="DataHub" value={deployment.datahub_model_urn} />
+                <Fact
+                  label="DataHub"
+                  value={
+                    <SourceLink
+                      href={deployment.source_links?.datahub}
+                      value={deployment.datahub_model_urn}
+                    />
+                  }
+                />
               </div>
             </div>
           </section>

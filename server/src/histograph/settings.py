@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AnyHttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     clickhouse_user: str = "histograph"
     clickhouse_password: str = "histograph"
     datahub_gms_url: str = "http://localhost:8080"
+    datahub_frontend_url: AnyHttpUrl | None = None
     datahub_gms_token: str | None = Field(default=None, repr=False)
     datahub_mcp_command: str = "uvx"
     datahub_mcp_package: str = "mcp-server-datahub==0.6.0"
