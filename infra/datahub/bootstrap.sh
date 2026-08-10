@@ -23,6 +23,7 @@ if [[ -z "$token" ]]; then
         printf 'DataHub CLI did not create %s\n' "$datahub_config_file" >&2
         exit 1
     fi
+    chmod 600 "$datahub_config_file"
     token="$(awk '$1 == "token:" {print $2; exit}' "$datahub_config_file")"
 fi
 

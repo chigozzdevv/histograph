@@ -2,6 +2,7 @@ name: histograph-demo
 
 x-histograph-image: &histograph-image
   image: ${HISTOGRAPH_IMAGE:-histograph-demo:local}
+  restart: unless-stopped
   build:
     context: .
 
@@ -17,7 +18,7 @@ x-control-plane-environment: &control-plane-environment
   HISTOGRAPH_DATAHUB_GMS_TOKEN: ${HISTOGRAPH_DATAHUB_GMS_TOKEN:-}
   HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED: ${HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED:-true}
   HISTOGRAPH_GITHUB_APP_ID: ${HISTOGRAPH_GITHUB_APP_ID:-}
-  HISTOGRAPH_GITHUB_APP_PRIVATE_KEY: ${HISTOGRAPH_GITHUB_APP_PRIVATE_KEY:-}
+  HISTOGRAPH_GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github_app_private_key
   HISTOGRAPH_GITHUB_WEBHOOK_SECRET: ${HISTOGRAPH_GITHUB_WEBHOOK_SECRET:-}
   HISTOGRAPH_GITHUB_CONFIGURATION_TOKEN: ${HISTOGRAPH_GITHUB_CONFIGURATION_TOKEN:-}
   HISTOGRAPH_REFERENCE_CONTROL_TOKEN: ${HISTOGRAPH_REFERENCE_CONTROL_TOKEN:-}
@@ -32,6 +33,7 @@ x-control-plane-environment: &control-plane-environment
 services:
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: histograph
       POSTGRES_USER: histograph
@@ -46,6 +48,7 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.7-alpine
+    restart: unless-stopped
     environment:
       CLICKHOUSE_DB: histograph
       CLICKHOUSE_USER: histograph
@@ -74,6 +77,10 @@ services:
       - --proxy-headers
       - --forwarded-allow-ips=*
     environment: *control-plane-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    secrets:
+      - github_app_private_key
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,6 +96,10 @@ services:
     <<: *histograph-image
     command: ["python", "-m", "histograph.workers"]
     environment: *control-plane-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    secrets:
+      - github_app_private_key
     depends_on:
       api:
         condition: service_healthy
@@ -123,6 +134,10 @@ services:
       HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_NAME: ${HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_NAME:-}
       HISTOGRAPH_REFERENCE_GITHUB_BRANCH: ${HISTOGRAPH_REFERENCE_GITHUB_BRANCH:-main}
       HISTOGRAPH_REFERENCE_GITHUB_MANIFEST_PATH: ${HISTOGRAPH_REFERENCE_GITHUB_MANIFEST_PATH:-.histograph/deployments/mobile-money-fraud.yaml}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    secrets:
+      - github_app_private_key
     volumes:
       - reconciler-state:/state
     depends_on:
@@ -131,6 +146,7 @@ services:
 
   proxy:
     image: caddy:2.10-alpine
+    restart: unless-stopped
     environment:
       HISTOGRAPH_DEMO_SITE_ADDRESS: ${HISTOGRAPH_DEMO_SITE_ADDRESS:-http://localhost}
     ports:
@@ -153,3 +169,7 @@ volumes:
   reconciler-state:
   caddy-data:
   caddy-config:
+
+secrets:
+  github_app_private_key:
+    file: ${HISTOGRAPH_GITHUB_APP_PRIVATE_KEY_FILE:-./secrets/github-app-private-key.pem}
