@@ -66,11 +66,12 @@ class MonitorRepository:
                     """
                     SELECT monitors.*,
                            latest_run.status AS latest_run_status,
+                           latest_run.result ->> 'status' AS latest_run_result_status,
                            latest_run.triggered AS latest_run_triggered,
                            latest_run.finished_at AS latest_run_at
                     FROM monitors
                     LEFT JOIN LATERAL (
-                        SELECT status, triggered, finished_at
+                        SELECT status, result, triggered, finished_at
                         FROM monitor_runs
                         WHERE monitor_runs.monitor_id = monitors.id
                         ORDER BY started_at DESC
