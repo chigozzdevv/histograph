@@ -1,87 +1,196 @@
-type NodeKind = "dataset" | "features" | "model" | "deployment";
+type HealthTone = "alert" | "neutral" | "recovery";
 
-type GraphNodeProps = {
-  className: string;
-  kind: NodeKind;
+type LineageNodeProps = {
+  kind: "features" | "model" | "source" | "verified";
   label: string;
-  tone?: "default" | "lineage" | "brand";
+  x: number;
 };
 
-const toneStyles = {
-  default: "border-white/12 bg-midnight/92 text-ink-soft",
-  lineage: "border-lineage/30 bg-lineage/7 text-lineage",
-  brand: "border-brand/30 bg-brand/7 text-brand-soft",
+const healthBars: Array<{ height: number; tone: HealthTone }> = [
+  { height: 52, tone: "neutral" },
+  { height: 55, tone: "neutral" },
+  { height: 54, tone: "neutral" },
+  { height: 57, tone: "neutral" },
+  { height: 55, tone: "neutral" },
+  { height: 53, tone: "neutral" },
+  { height: 56, tone: "neutral" },
+  { height: 54, tone: "neutral" },
+  { height: 55, tone: "neutral" },
+  { height: 51, tone: "neutral" },
+  { height: 45, tone: "alert" },
+  { height: 34, tone: "alert" },
+  { height: 20, tone: "alert" },
+  { height: 15, tone: "alert" },
+  { height: 23, tone: "alert" },
+  { height: 33, tone: "recovery" },
+  { height: 42, tone: "recovery" },
+  { height: 49, tone: "recovery" },
+  { height: 53, tone: "recovery" },
+  { height: 55, tone: "recovery" },
+  { height: 56, tone: "recovery" },
+  { height: 57, tone: "recovery" },
+];
+
+const nodeStyles = {
+  features: {
+    className: "histograph-node--neutral",
+    stroke: "rgba(255,255,255,0.48)",
+  },
+  model: {
+    className: "histograph-node--model",
+    stroke: "#b45cff",
+  },
+  source: {
+    className: "histograph-node--source",
+    stroke: "#b45cff",
+  },
+  verified: {
+    className: "histograph-node--verified",
+    stroke: "#77d9a7",
+  },
 } as const;
 
-function NodeIcon({ kind }: { kind: NodeKind }) {
-  if (kind === "dataset") {
+function NodeGlyph({ kind }: Pick<LineageNodeProps, "kind">) {
+  if (kind === "source") {
     return (
-      <svg aria-hidden="true" className="size-3.5" fill="none" viewBox="0 0 16 16">
-        <ellipse cx="8" cy="4" rx="4.5" ry="2" stroke="currentColor" />
-        <path d="M3.5 4v4c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V4m-9 4v4c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V8" stroke="currentColor" />
-      </svg>
+      <g fill="none" stroke="#d4b1ff" strokeLinecap="square" strokeWidth="1.5">
+        <path d="M-11-8H9M-11-2H11M-11 4H5" />
+        <path d="M7 2v8M3 6h8" />
+      </g>
     );
   }
 
   if (kind === "features") {
     return (
-      <svg aria-hidden="true" className="size-3.5" fill="none" viewBox="0 0 16 16">
-        <circle cx="4" cy="4" r="1.5" stroke="currentColor" />
-        <circle cx="12" cy="4" r="1.5" stroke="currentColor" />
-        <circle cx="8" cy="12" r="1.5" stroke="currentColor" />
-        <path d="m5.2 5 2 5.4M10.8 5l-2 5.4M5.5 4h5" stroke="currentColor" />
-      </svg>
+      <g fill="#dedede">
+        <rect height="4" width="4" x="-9" y="-9" />
+        <rect height="4" width="4" x="5" y="-9" />
+        <rect height="4" width="4" x="-9" y="5" />
+        <rect height="4" width="4" x="5" y="5" />
+      </g>
     );
   }
 
   if (kind === "model") {
     return (
-      <svg aria-hidden="true" className="size-3.5" fill="none" viewBox="0 0 16 16">
-        <path d="m8 2 5 3v6l-5 3-5-3V5l5-3Z" stroke="currentColor" />
-        <path d="m3.5 5.3 4.5 2.6 4.5-2.6M8 8v5.5" stroke="currentColor" />
-      </svg>
+      <path
+        d="M-13 1h5l5-9 7 17 5-9h5"
+        fill="none"
+        stroke="#f0e8ff"
+        strokeLinecap="square"
+        strokeLinejoin="miter"
+        strokeWidth="1.5"
+      />
     );
   }
 
   return (
-    <svg aria-hidden="true" className="size-3.5" fill="none" viewBox="0 0 16 16">
-      <path d="M4 4h8v8H4z" stroke="currentColor" />
-      <path d="M6.5 8h5m0 0-2-2m2 2-2 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <path
+      d="m-10 0 7 7 14-16"
+      fill="none"
+      stroke="#a9f3c9"
+      strokeLinecap="square"
+      strokeLinejoin="miter"
+      strokeWidth="1.8"
+    />
   );
 }
 
-function GraphNode({ className, kind, label, tone = "default" }: GraphNodeProps) {
+function LineageNode({ kind, label, x }: LineageNodeProps) {
+  const style = nodeStyles[kind];
+
   return (
-    <div
-      className={`graph-node absolute z-10 flex items-center gap-2 border px-2.5 py-2 font-mono text-[9px] whitespace-nowrap shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:px-3 sm:text-[10px] ${toneStyles[tone]} ${className}`}
-    >
-      <NodeIcon kind={kind} />
-      <span>{label}</span>
-    </div>
+    <g transform={`translate(${x} 410)`}>
+      <g className={style.className}>
+        <rect
+          fill="#080808"
+          height="48"
+          stroke={style.stroke}
+          strokeWidth="1.3"
+          width="48"
+          x="-24"
+          y="-24"
+        />
+        <NodeGlyph kind={kind} />
+      </g>
+      <text
+        className={kind === "verified" ? "fill-[#77d9a7]" : "fill-[#a7a7a7]"}
+        fontFamily="var(--font-geist-mono)"
+        fontSize="9"
+        letterSpacing="0.08em"
+        textAnchor="middle"
+        y="62"
+      >
+        {label}
+      </text>
+    </g>
   );
 }
 
-function Connections() {
-  const route =
-    "M118 132C182 132 220 230 298 230C372 230 402 130 486 130C520 184 510 270 454 314H560";
+function HealthHistogram() {
+  return (
+    <g>
+      <g stroke="rgba(255,255,255,0.05)">
+        <path d="M70 166H490" />
+      </g>
+      <path d="M70 250H490" stroke="rgba(255,255,255,0.14)" />
+      {healthBars.map((bar, index) => {
+        const x = 70 + index * 19;
+
+        return (
+          <rect
+            className={`health-bar health-bar--${bar.tone}`}
+            height={bar.height}
+            key={`${x}-${bar.height}`}
+            width="11"
+            x={x}
+            y={250 - bar.height}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+function RegisterPattern() {
+  const columns = [100, 220, 340, 460] as const;
+  const rows = [110, 210, 310, 410, 510] as const;
+
+  return (
+    <g className="histograph-register" fill="none">
+      <g>
+        {rows.map((row) => (
+          <path d={`M40 ${row}H520`} key={`row-${row}`} />
+        ))}
+        {columns.map((column) => (
+          <path d={`M${column} 70V550`} key={`column-${column}`} />
+        ))}
+      </g>
+    </g>
+  );
+}
+
+function HistographSignal() {
+  const tracePath = "M340 250V410H124";
+  const recoveryPath = "M364 410H460V250";
 
   return (
     <svg
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 size-full"
-      preserveAspectRatio="none"
-      viewBox="0 0 620 420"
+      className="absolute inset-0 size-full scale-[1.06] sm:scale-100"
+      preserveAspectRatio="xMidYMid meet"
+      viewBox="0 0 560 620"
     >
       <defs>
-        <linearGradient id="lineage-gradient" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0" stopColor="#ff5f6d" />
-          <stop offset="0.38" stopColor="#36cfc9" />
-          <stop offset="0.72" stopColor="#7182ff" />
-          <stop offset="1" stopColor="#42c99a" />
-        </linearGradient>
-        <filter id="lineage-signal-glow" x="-300%" y="-300%" width="700%" height="700%">
-          <feGaussianBlur result="blur" stdDeviation="3" />
+        <filter id="histograph-violet-glow" x="-300%" y="-300%" width="700%" height="700%">
+          <feGaussianBlur result="blur" stdDeviation="4" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="histograph-green-glow" x="-300%" y="-300%" width="700%" height="700%">
+          <feGaussianBlur result="blur" stdDeviation="5" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -89,36 +198,84 @@ function Connections() {
         </filter>
       </defs>
 
+      <RegisterPattern />
+
+      <text className="fill-white/52 font-mono text-[10px] tracking-[0.1em]" x="70" y="132">
+        MODEL HEALTH
+      </text>
+      <HealthHistogram />
+
+      <text className="fill-white/52 font-mono text-[10px] tracking-[0.1em]" x="76" y="342">
+        DATAHUB LINEAGE
+      </text>
+
+      <g fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.25">
+        <path d="M124 410H196M244 410H316" />
+      </g>
+
       <path
-        d="M78 62C84 88 102 103 118 132"
+        d={tracePath}
         fill="none"
-        stroke="#ff5f6d"
-        strokeDasharray="3 7"
-        strokeLinecap="round"
-        strokeOpacity="0.5"
+        stroke="rgba(180,92,255,0.26)"
+        strokeWidth="1.4"
       />
       <path
-        d={route}
+        className="histograph-trace"
+        d={tracePath}
         fill="none"
-        stroke="#223249"
-        strokeLinecap="round"
-        strokeWidth="1.5"
+        filter="url(#histograph-violet-glow)"
+        pathLength="1"
+        stroke="#b45cff"
+        strokeLinecap="square"
+        strokeLinejoin="miter"
+        strokeWidth="2"
+      />
+
+      <path
+        d={recoveryPath}
+        fill="none"
+        stroke="rgba(119,217,167,0.24)"
+        strokeWidth="1.4"
       />
       <path
-        className="lineage-route"
-        d={route}
+        className="histograph-recovery"
+        d={recoveryPath}
         fill="none"
-        stroke="url(#lineage-gradient)"
-        strokeLinecap="round"
-        strokeWidth="1.5"
+        filter="url(#histograph-green-glow)"
+        pathLength="1"
+        stroke="#77d9a7"
+        strokeLinecap="square"
+        strokeLinejoin="miter"
+        strokeWidth="2"
       />
-      <circle
-        className="lineage-signal"
-        fill="#f6f8fb"
-        filter="url(#lineage-signal-glow)"
-        r="3"
-      >
-        <animateMotion dur="7s" path={route} repeatCount="indefinite" />
+
+      <LineageNode kind="source" label="SOURCE" x={100} />
+      <LineageNode kind="features" label="FEATURES" x={220} />
+      <LineageNode kind="model" label="MODEL" x={340} />
+      <LineageNode kind="verified" label="VERIFIED" x={460} />
+
+      <circle cx="340" cy="250" fill="#b45cff" fillOpacity="0.58" r="2.5" />
+      <circle cx="460" cy="250" fill="#77d9a7" fillOpacity="0.58" r="2.5" />
+
+      <circle className="histograph-trace-signal" fill="#d4b1ff" filter="url(#histograph-violet-glow)" r="3">
+        <animateMotion
+          calcMode="linear"
+          dur="8s"
+          keyPoints="0;0;1;1"
+          keyTimes="0;0.2;0.48;1"
+          path={tracePath}
+          repeatCount="indefinite"
+        />
+      </circle>
+      <circle className="histograph-recovery-signal" fill="#a9f3c9" filter="url(#histograph-green-glow)" r="3.5">
+        <animateMotion
+          calcMode="linear"
+          dur="8s"
+          keyPoints="0;0;1;1"
+          keyTimes="0;0.54;0.78;1"
+          path={recoveryPath}
+          repeatCount="indefinite"
+        />
       </circle>
     </svg>
   );
@@ -126,60 +283,11 @@ function Connections() {
 
 export function IncidentFlow() {
   return (
-    <figure className="relative mx-auto w-full max-w-170 lg:ml-auto">
-      <div className="absolute -inset-10 -z-10 bg-[radial-gradient(circle_at_center,rgba(113,130,255,0.12),transparent_68%)] blur-2xl" />
-
-      <div className="lineage-canvas relative min-h-95 overflow-hidden border border-white/10 bg-[#081421]/78 shadow-[0_30px_100px_rgba(0,0,0,0.28)] sm:aspect-[1.47] sm:min-h-0">
-        <Connections />
-
-        <div className="schema-chip absolute top-[8%] left-[7%] z-10 inline-flex items-center gap-2 border border-critical/20 bg-[#e8eaee] px-3 py-2 font-mono text-[9px] text-[#1a1f2a] shadow-[0_12px_28px_rgba(0,0,0,0.2)] sm:text-[10px]">
-          <span className="schema-pulse size-1.5 rounded-full bg-critical" />
-          schema change
-        </div>
-
-        <GraphNode
-          className="top-[27%] left-[7%]"
-          kind="dataset"
-          label="transactions_v4"
-          tone="lineage"
-        />
-        <GraphNode
-          className="top-[51%] left-[37%]"
-          kind="features"
-          label="fraud_features"
-        />
-        <GraphNode
-          className="top-[26%] left-[69%]"
-          kind="model"
-          label="fraud_model"
-          tone="brand"
-        />
-        <GraphNode
-          className="top-[70%] left-[57%] sm:left-[67%]"
-          kind="deployment"
-          label="v42 active"
-          tone="brand"
-        />
-
-        <div className="verified-node absolute top-[69%] right-[3%] z-10 grid size-10 place-items-center rounded-full border border-success/30 bg-success/8 text-success shadow-[0_0_30px_rgba(66,201,154,0.12)] sm:size-11">
-          <svg aria-hidden="true" className="size-5" fill="none" viewBox="0 0 20 20">
-            <path
-              d="m5.5 10 3 3 6-6"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.75"
-            />
-          </svg>
-          <span className="absolute top-full mt-2 font-mono text-[8px] tracking-[0.08em] text-success uppercase">
-            verified
-          </span>
-        </div>
-      </div>
-
+    <figure className="histograph-canvas relative h-full min-h-130 overflow-hidden lg:min-h-[calc(100svh-4.25rem)]">
+      <HistographSignal />
       <figcaption className="sr-only">
-        A schema change travels through a DataHub lineage graph from a production dataset to
-        a feature set and model. Histograph coordinates a rollback and verifies recovery.
+        Model health degrades after a source change. Histograph traces the cause backward through
+        DataHub lineage and carries a verified recovery back into the production health signal.
       </figcaption>
     </figure>
   );

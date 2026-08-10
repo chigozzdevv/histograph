@@ -4,15 +4,15 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  --color-midnight: #07111f;
-  --color-panel: #0d1a2b;
-  --color-brand: #7182ff;
-  --color-brand-soft: #8e9bff;
-  --color-lineage: #36cfc9;
-  --color-critical: #ff5f6d;
-  --color-success: #42c99a;
-  --color-ink-soft: #d7deea;
-  --color-ink-muted: #9aa8bb;
+  --color-midnight: #080808;
+  --color-panel: #0c0c0c;
+  --color-brand: #941cff;
+  --color-brand-soft: #b45cff;
+  --color-lineage: #a855f7;
+  --color-critical: #ff7380;
+  --color-success: #77d9a7;
+  --color-ink-soft: #e3e3e3;
+  --color-ink-muted: #b4b4b4;
 }
 
 * {
@@ -20,13 +20,13 @@
 }
 
 html {
-  background: #07111f;
+  background: #080808;
   scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
-  background: #07111f;
+  background: #080808;
   color: #f6f8fb;
 }
 
@@ -36,77 +36,319 @@ a {
 }
 
 ::selection {
-  background: #7182ff;
-  color: #07111f;
+  background: #941cff;
+  color: #ffffff;
 }
 
-.hero-grid {
+.histograph-canvas {
+  background: radial-gradient(circle at 57% 47%, rgba(148, 28, 255, 0.075), transparent 34%);
+}
+
+.dashboard-chart-grid {
   background-image:
-    linear-gradient(rgba(154, 168, 187, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(154, 168, 187, 0.045) 1px, transparent 1px);
-  background-size: 72px 72px;
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 70% 55%, rgba(148, 28, 255, 0.08), transparent 40%);
+  background-size: 100% 25%, 12.5% 100%, 100% 100%;
 }
 
-.lineage-canvas {
+.dashboard-register {
   background-image:
-    linear-gradient(rgba(154, 168, 187, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(154, 168, 187, 0.055) 1px, transparent 1px);
-  background-size: 64px 64px;
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
+  background-size: 4rem 4rem;
 }
 
-.lineage-route {
-  stroke-dasharray: 8 12;
-  animation: lineage-travel 7s linear infinite;
+.histograph-register path {
+  stroke: rgba(255, 255, 255, 0.06);
+  vector-effect: non-scaling-stroke;
 }
 
-.schema-chip {
-  animation: schema-drift 5s ease-in-out infinite;
+.health-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
 }
 
-.schema-pulse {
-  animation: schema-pulse 2s ease-in-out infinite;
+.health-bar--neutral {
+  fill: rgba(255, 255, 255, 0.34);
 }
 
-.verified-node {
-  animation: verified-ring 3s ease-in-out infinite;
+.health-bar--alert {
+  fill: rgba(180, 92, 255, 0.74);
+  animation: health-alert 8s ease-in-out infinite;
 }
 
-@keyframes lineage-travel {
-  to {
-    stroke-dashoffset: -160;
+.health-bar--recovery {
+  fill: rgba(119, 217, 167, 0.54);
+  animation: health-recovery 8s ease-in-out infinite;
+}
+
+.histograph-trace,
+.histograph-recovery {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.histograph-trace {
+  animation: histograph-trace 8s ease-in-out infinite;
+}
+
+.histograph-recovery {
+  animation: histograph-recovery 8s ease-in-out infinite;
+}
+
+.histograph-node--model,
+.histograph-node--source,
+.histograph-node--verified {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.histograph-node--model {
+  animation: histograph-model 8s ease-in-out infinite;
+}
+
+.histograph-node--source {
+  animation: histograph-source 8s ease-in-out infinite;
+}
+
+.histograph-node--verified {
+  animation: histograph-verified 8s ease-in-out infinite;
+}
+
+.histograph-trace-signal,
+.histograph-recovery-signal {
+  opacity: 0;
+}
+
+.hero-term-rotator {
+  display: inline-grid;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.hero-term-rotator__item {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: baseline;
+  justify-self: start;
+  opacity: 0;
+  transform: translateY(0.16em);
+  animation: hero-term-cycle var(--term-duration, 9s) ease-in-out infinite;
+  animation-delay: var(--term-delay, 0s);
+  will-change: opacity, transform;
+}
+
+.hero-term-rotator__text {
+  background: linear-gradient(90deg, #a55cff 0%, #b9c8ff 55%, #9af0bd 100%);
+  background-clip: text;
+  color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-term-rotator__cursor {
+  width: 0.16em;
+  height: 0.76em;
+  margin-left: 0.1em;
+  align-self: center;
+  background: rgba(180, 92, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(180, 92, 255, 0.08);
+  animation: hero-term-cursor 1s steps(1, end) infinite;
+}
+
+.histograph-trace-signal {
+  animation: histograph-trace-signal 8s linear infinite;
+}
+
+.histograph-recovery-signal {
+  animation: histograph-recovery-signal 8s linear infinite;
+}
+
+@keyframes health-alert {
+  0%,
+  15%,
+  52%,
+  100% {
+    opacity: 0.58;
+  }
+
+  22%,
+  44% {
+    opacity: 1;
   }
 }
 
-@keyframes schema-drift {
+@keyframes health-recovery {
   0%,
+  54% {
+    opacity: 0.32;
+  }
+
+  66%,
+  90% {
+    opacity: 1;
+  }
+
   100% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes histograph-trace {
+  0%,
+  19% {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+
+  22% {
+    opacity: 1;
+  }
+
+  48%,
+  86% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  100% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes histograph-recovery {
+  0%,
+  53% {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+
+  56% {
+    opacity: 1;
+  }
+
+  78%,
+  92% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  100% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes histograph-model {
+  0%,
+  14%,
+  52%,
+  100% {
+    filter: brightness(0.9);
+    scale: 1;
+  }
+
+  21%,
+  43% {
+    filter: brightness(1.35);
+    scale: 1.06;
+  }
+}
+
+@keyframes histograph-source {
+  0%,
+  42%,
+  100% {
+    filter: brightness(0.88);
+    scale: 1;
+  }
+
+  49%,
+  61% {
+    filter: brightness(1.32);
+    scale: 1.06;
+  }
+}
+
+@keyframes histograph-verified {
+  0%,
+  68%,
+  100% {
+    filter: brightness(0.72);
+    scale: 0.97;
+  }
+
+  76%,
+  91% {
+    filter: brightness(1.3);
+    scale: 1.06;
+  }
+}
+
+@keyframes histograph-trace-signal {
+  0%,
+  19% {
+    opacity: 0;
+  }
+
+  20%,
+  47% {
+    opacity: 1;
+  }
+
+  49%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes histograph-recovery-signal {
+  0%,
+  53% {
+    opacity: 0;
+  }
+
+  54%,
+  77% {
+    opacity: 1;
+  }
+
+  79%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-term-cycle {
+  0% {
+    opacity: 0;
+    transform: translateY(0.16em);
+  }
+
+  4%,
+  29% {
+    opacity: 1;
     transform: translateY(0);
   }
 
-  50% {
-    transform: translateY(-4px);
+  35%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.12em);
   }
 }
 
-@keyframes schema-pulse {
+@keyframes hero-term-cursor {
   0%,
+  48% {
+    opacity: 1;
+  }
+
+  49%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 95, 109, 0);
-  }
-
-  50% {
-    box-shadow: 0 0 0 5px rgba(255, 95, 109, 0.1);
-  }
-}
-
-@keyframes verified-ring {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(66, 201, 154, 0);
-  }
-
-  50% {
-    box-shadow: 0 0 0 5px rgba(66, 201, 154, 0.07);
+    opacity: 0.28;
   }
 }
 
@@ -115,14 +357,50 @@ a {
     scroll-behavior: auto;
   }
 
-  .lineage-route,
-  .schema-chip,
-  .schema-pulse,
-  .verified-node {
+  .health-bar--alert,
+  .health-bar--recovery,
+  .histograph-trace,
+  .histograph-recovery,
+  .histograph-node--model,
+  .histograph-node--source,
+  .histograph-node--verified,
+  .histograph-trace-signal,
+  .histograph-recovery-signal,
+  .hero-term-rotator__item,
+  .hero-term-rotator__cursor {
     animation: none;
   }
 
-  .lineage-signal {
+  .hero-term-rotator__item {
+    opacity: 0;
+    transform: none;
+  }
+
+  .hero-term-rotator__item:first-child {
+    opacity: 1;
+  }
+
+  .histograph-trace,
+  .histograph-recovery {
+    opacity: 0.75;
+    stroke-dashoffset: 0;
+  }
+
+  .histograph-trace-signal,
+  .histograph-recovery-signal {
     display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .hero-term-rotator__text {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+
+  .hero-term-rotator__cursor {
+    background: CanvasText;
+    box-shadow: none;
   }
 }

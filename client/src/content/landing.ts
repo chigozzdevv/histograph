@@ -5,10 +5,16 @@ export const navigation = [
 ] as const;
 
 export const heroContent = {
-  title: "From model failure to root cause.",
-  description: "Trace production failures through DataHub lineage and verify recovery.",
+  title: [
+    "Lineage-aware observability &",
+    "root-cause tracing for incident",
+  ],
+  titleEnding: {
+    prefix: "response in",
+    terms: ["production ML", "feature pipelines", "model serving"],
+  },
   action: {
     label: "Run a demo",
-    href: "#demo",
+    href: "/demo",
   },
 } as const;
