@@ -48,6 +48,10 @@ class RuntimeConnector:
             token=self._control_token,
         )
 
+    async def state(self, deployment: dict[str, Any]) -> dict[str, Any]:
+        endpoint = self._endpoint(deployment)
+        return await self._get(endpoint, "/v1/runtime")
+
     @staticmethod
     def validate_input(deployment: dict[str, Any], features: dict[str, Any]) -> None:
         schema = deployment.get("input_schema")
@@ -95,6 +99,19 @@ class RuntimeConnector:
             headers=headers,
         ) as client:
             response = await client.post(path, json=payload)
+        response.raise_for_status()
+        body = response.json()
+        if not isinstance(body, dict):
+            raise RuntimeError("Reference runtime returned a non-object response")
+        return body
+
+    async def _get(self, endpoint: str, path: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(
+            base_url=endpoint,
+            timeout=self._timeout_seconds,
+            transport=self._transport,
+        ) as client:
+            response = await client.get(path)
         response.raise_for_status()
         body = response.json()
         if not isinstance(body, dict):

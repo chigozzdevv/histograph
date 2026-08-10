@@ -50,6 +50,8 @@ async def test_runtime_connector_validates_inputs_and_keeps_compare_out_of_telem
                     "candidate": {"version": "v2", "score": 0.1},
                 },
             )
+        if request.url.path == "/v1/runtime":
+            return httpx.Response(200, json={"status": "ready", "revision": "release-sha"})
         raise AssertionError(f"Unexpected runtime request: {request.url}")
 
     connector = RuntimeConnector(
@@ -63,9 +65,11 @@ async def test_runtime_connector_validates_inputs_and_keeps_compare_out_of_telem
     assert (await connector.predict(_deployment(), features))["version"] == "v1"
     comparison = await connector.compare(_deployment(), features)
     assert comparison["candidate"]["version"] == "v2"
+    assert (await connector.state(_deployment()))["revision"] == "release-sha"
     assert calls == [
         ("/v1/predict", None),
         ("/v1/compare", "Bearer runtime-control"),
+        ("/v1/runtime", None),
     ]
 
     with pytest.raises(ValueError, match="required property"):

@@ -1,12 +1,17 @@
 import asyncio
 import json
+import logging
 import posixpath
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
+import httpx
 import yaml
 
+from histograph.changes.types import Change
+from histograph.core.time import ensure_utc
+from histograph.deployments.types import Deployment
 from histograph.integrations.github.client import GitHubClient
 from histograph.integrations.github.manifest import parse_manifest
 from histograph.integrations.github.repository import GitOpsRepository
@@ -18,6 +23,8 @@ from histograph.integrations.github.types import (
 )
 from histograph.models.repository import ModelRepository
 from histograph.models.types import ModelDefinition
+
+logger = logging.getLogger(__name__)
 
 
 class ExternalRemediationStore(Protocol):
@@ -68,16 +75,24 @@ class GitHubWebhookStore(Protocol):
     ) -> list[dict[str, Any]]: ...
 
 
+class RuntimeStateSource(Protocol):
+    async def state(self, deployment: dict[str, Any]) -> dict[str, Any]: ...
+
+
 class GitHubIntegrationService:
     def __init__(
         self,
         repository: GitOpsRepository,
         models: ModelRepository,
         client: GitHubClient | None,
+        runtime: RuntimeStateSource | None = None,
+        managed_runtime_url: str | None = None,
     ):
         self._repository = repository
         self._models = models
         self._client = client
+        self._runtime = runtime
+        self._managed_runtime_url = managed_runtime_url.rstrip("/") if managed_runtime_url else None
 
     def create_connection(self, connection: GitHubConnectionCreate) -> UUID:
         return self._repository.save_connection(connection)
@@ -117,10 +132,76 @@ class GitHubIntegrationService:
             deployment = self._repository.get_deployment(deployment_id)
             if deployment is None:
                 raise RuntimeError("Imported GitOps deployment could not be read back")
+            await self._hydrate_managed_runtime_state(deployment)
+            deployment = self._repository.get_deployment(deployment_id)
+            if deployment is None:
+                raise RuntimeError("Imported GitOps deployment could not be read back")
             return deployment
         except Exception as error:
             self._repository.fail_sync(connection_id, str(error))
             raise
+
+    async def _hydrate_managed_runtime_state(self, deployment: dict[str, Any]) -> None:
+        endpoint = deployment["manifest"]["spec"]["runtime"].get("endpoint")
+        if (
+            self._runtime is None
+            or self._managed_runtime_url is None
+            or not isinstance(endpoint, str)
+            or endpoint.rstrip("/") != self._managed_runtime_url
+        ):
+            return
+        try:
+            state = await self._runtime.state(deployment)
+            if state.get("status") != "ready" or not isinstance(state.get("manifest"), dict):
+                return
+            observed = ModelDeploymentManifest.model_validate(state["manifest"])
+            desired = ModelDeploymentManifest.model_validate(deployment["manifest"])
+            if (
+                observed.metadata.name != desired.metadata.name
+                or observed.spec.model.name != desired.spec.model.name
+                or observed.spec.environment != desired.spec.environment
+            ):
+                logger.warning(
+                    "managed runtime state does not match the imported deployment identity"
+                )
+                return
+            occurred_at = _runtime_timestamp(state.get("applied_at"))
+            strategy = "canary" if observed.spec.candidate is not None else "standard"
+            for release in (observed.spec.stable, observed.spec.candidate):
+                if release is None:
+                    continue
+                self._repository.observe_deployment(
+                    Deployment(
+                        deployment=observed.metadata.name,
+                        model=observed.spec.model.name,
+                        version=release.version,
+                        environment=observed.spec.environment,
+                        strategy=strategy,
+                        traffic_percentage=release.traffic_percentage,
+                        status="active" if release.traffic_percentage > 0 else "stopped",
+                        occurred_at=occurred_at,
+                        endpoint=observed.spec.runtime.endpoint,
+                    )
+                )
+            for feature in observed.spec.features:
+                self._repository.observe_change(
+                    Change(
+                        asset_urn=feature.asset_urn,
+                        asset_name=feature.name,
+                        asset_type="feature",
+                        version=feature.version,
+                        environment=observed.spec.environment,
+                        change_type="configuration",
+                        status="applied",
+                        occurred_at=occurred_at,
+                        metadata={
+                            "runtime_revision": state.get("revision"),
+                            "configuration": feature.configuration,
+                        },
+                    )
+                )
+        except (httpx.HTTPError, PermissionError, RuntimeError, ValueError) as error:
+            logger.warning("managed runtime state could not be hydrated: %s", error)
 
     async def _resolve_interface(
         self,
@@ -312,6 +393,12 @@ class GitHubWebhookService:
         if action is None:
             raise RuntimeError("GitHub deployment action disappeared during completion")
         return {"status": terminal, "action_id": str(record["action_id"])}
+
+
+def _runtime_timestamp(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("Managed runtime state has no applied_at timestamp")
+    return ensure_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
 
 
 def _repository(payload: dict[str, Any]) -> tuple[str, str]:

@@ -48,6 +48,7 @@ from histograph.telemetry.service import TelemetryService
 def create_app(
     settings: Settings | None = None,
     github_client: GitHubClient | None = None,
+    runtime_connector: RuntimeConnector | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     database = PostgresDatabase(resolved_settings.postgres_dsn)
@@ -61,7 +62,7 @@ def create_app(
     demo_runs_repository = DemoRunRepository(database)
     product_repository = ProductRepository(database)
     rate_limits_repository = RateLimitRepository(database)
-    runtime_connector = RuntimeConnector(
+    resolved_runtime_connector = runtime_connector or RuntimeConnector(
         resolved_settings.playground_allowed_hosts,
         resolved_settings.reference_control_token,
         resolved_settings.playground_timeout_seconds,
@@ -81,7 +82,11 @@ def create_app(
     deployment_service = DeploymentService(deployments_repository, (gitops_repository,))
     change_service = ChangeService(changes_repository, (gitops_repository,))
     github_integration = GitHubIntegrationService(
-        gitops_repository, models_repository, resolved_github_client
+        gitops_repository,
+        models_repository,
+        resolved_github_client,
+        resolved_runtime_connector,
+        resolved_settings.demo_runtime_url,
     )
     github_webhooks = GitHubWebhookService(
         gitops_repository, remediation_repository, github_integration
@@ -112,7 +117,7 @@ def create_app(
     app.state.github_webhooks = github_webhooks
     app.state.product = product_repository
     app.state.rate_limits = rate_limits_repository
-    app.state.runtime_connector = runtime_connector
+    app.state.runtime_connector = resolved_runtime_connector
     app.state.models = models_repository
     app.state.clickhouse = clickhouse
     app.state.telemetry = telemetry_repository

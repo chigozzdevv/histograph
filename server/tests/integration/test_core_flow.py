@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 import clickhouse_connect
 import joblib
 import pytest
+import yaml
 from demo.runtime.service import ReferenceRuntime
 from demo.runtime.state import RuntimeStateStore
 from demo.runtime.telemetry import TelemetryWorker
@@ -23,6 +24,7 @@ from histograph.api.app import create_app
 from histograph.detection.service import MonitorEvaluationService
 from histograph.integrations.github.types import CreatedPullRequest, GitHubRepositoryFile
 from histograph.integrations.github.workers import GitOpsProposalWorker
+from histograph.product.runtime import RuntimeConnector
 from histograph.remediation.adapters import RemediationAdapter
 from histograph.remediation.service import RemediationService
 from histograph.remediation.types import ExecutionResult
@@ -795,6 +797,24 @@ class ContractGitHubClient:
         )
 
 
+class ContractRuntimeConnector(RuntimeConnector):
+    def __init__(self) -> None:
+        self.root = Path(__file__).resolve().parents[3]
+
+    async def state(self, deployment: dict[str, Any]) -> dict[str, Any]:
+        assert deployment["deployment"] == "mobile-money-fraud-production"
+        manifest = yaml.safe_load(
+            (self.root / ".histograph/deployments/mobile-money-fraud.yaml").read_text()
+        )
+        return {
+            "status": "ready",
+            "revision": "contract-sha",
+            "manifest": manifest,
+            "applied_at": "2026-08-10T11:10:20Z",
+            "outbox_pending": 0,
+        }
+
+
 def test_client_read_models_and_durable_demo_queue_use_the_imported_contract(
     integration_settings: Settings,
 ) -> None:
@@ -802,9 +822,14 @@ def test_client_read_models_and_durable_demo_queue_use_the_imported_contract(
         update={
             "demo_control_token": "demo-control",
             "reference_control_token": "runtime-control",
+            "demo_runtime_url": "http://runtime:8100",
         }
     )
-    app = create_app(settings, github_client=ContractGitHubClient())
+    app = create_app(
+        settings,
+        github_client=ContractGitHubClient(),
+        runtime_connector=ContractRuntimeConnector(),
+    )
     configuration = {"Authorization": "Bearer integration-github-config-token"}
     with TestClient(app) as client:
         connected = client.post(
@@ -825,6 +850,8 @@ def test_client_read_models_and_durable_demo_queue_use_the_imported_contract(
         )
         assert imported.status_code == 200
         deployment = client.get("/v1/deployments").json()[0]
+        assert deployment["sync_status"] == "in_sync"
+        assert set(deployment["observed_state"]["model_versions"]) == {"v1", "v2"}
         assert deployment["input_schema"]["title"] == "Mobile money fraud prediction"
         assert len(deployment["examples"]) == 2
         assert "manifest_content" not in deployment
