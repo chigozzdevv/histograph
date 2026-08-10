@@ -40,9 +40,7 @@ def test_write_back_requires_investigations(runner, tmp_path) -> None:
 
 
 def test_runtime_replay_reports_delivered_outcome_count(monkeypatch) -> None:
-    manifest = yaml.safe_load(
-        (Path(__file__).parents[2] / ".histograph/deployments/mobile-money-fraud.yaml").read_text()
-    )
+    manifest = yaml.safe_load((Path(__file__).parents[1] / "deployment.yaml").read_text())
     frame = pd.DataFrame(
         [
             {
