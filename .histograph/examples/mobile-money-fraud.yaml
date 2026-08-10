@@ -14,16 +14,16 @@ examples:
       recipient_velocity_24h: 42
       transaction_type: PAYMENT
   - id: fraudulent-transfer
-    label: Labeled fraudulent transfer
+    label: Fraud caught by v1 and missed by v2
     expectedActual: 1
     input:
-      amount: 19703.97
-      old_balance_initiator: 711063.97
-      new_balance_initiator: 691359.99
-      old_balance_recipient: 24183.71
-      new_balance_recipient: 43887.68
-      initiator_balance_delta: 19703.98
-      recipient_balance_delta: 19703.97
-      account_velocity_24h: 46
-      recipient_velocity_24h: 18
+      amount: 28049.04
+      old_balance_initiator: 57546.10
+      new_balance_initiator: 29497.06
+      old_balance_recipient: 0.00
+      new_balance_recipient: 28049.04
+      initiator_balance_delta: 28049.04
+      recipient_balance_delta: 28049.04
+      account_velocity_24h: 6
+      recipient_velocity_24h: 15
       transaction_type: TRANSFER
