@@ -302,9 +302,8 @@ private. Caddy exposes only the Histograph API.
 - [Reference environment](demo/README.md)
 - [Model card](demo/MODEL_CARD.md)
 - [Deployment manifest](.histograph/deployments/mobile-money-fraud.yaml)
-- [Example model inputs](.histograph/examples/mobile-money-fraud.yaml)
+- [Demo model inputs](.histograph/examples/mobile-money-fraud.yaml)
 - [Environment configuration](.env.example)
-- [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## License
 
