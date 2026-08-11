@@ -1,130 +1,174 @@
 # Histograph
 
-Histograph is a production ML incident-response platform. It receives model predictions, delayed outcomes, and deployment events; detects deterministic abnormalities; investigates them through DataHub lineage; coordinates approved remediation; and verifies recovery.
+Histograph is a production ML incident-response platform. It receives model predictions, delayed
+outcomes, deployment events, and upstream changes; detects deterministic regressions; investigates
+them through DataHub lineage; coordinates approved remediation; and verifies recovery before
+resolving an incident.
 
-The implemented headless runtime uses Postgres for control-plane state and ClickHouse for
-high-volume observations. The API receives events and approvals; a separate worker process runs
-scheduled detection, DataHub investigation, approved actions, and recovery verification.
+## How it works
 
-## Local services
+1. Histograph receives predictions, delayed outcomes, and deployment events.
+2. A continuous monitor detects a model regression.
+3. DataHub lineage connects the affected model to its features, datasets, owners, and consumers.
+4. Histograph correlates that context with release evidence to identify a probable cause.
+5. Histograph opens a rollback pull request for the affected deployment.
+6. An engineer reviews and merges the pull request.
+7. The deployment reconciler applies the approved change.
+8. Histograph evaluates fresh post-remediation predictions and outcomes.
+9. The incident is resolved only after recovery is verified, and the evidence is saved to DataHub.
 
-The repository compose file starts the Histograph dependencies without touching any other Docker project:
+Histograph keeps detection, investigation, remediation, and recovery separate:
+
+- `probable_cause` means the evidence is sufficient to propose a protective action.
+- `confirmed_cause` means recovery was verified after reversing the suspected change.
+- `resolved` means Histograph verified recovery using fresh post-remediation evidence.
+- `closed` means an engineer manually closed the incident with a recorded reason.
+
+## Dataset credit
+
+The reference environment uses:
+
+Azamuke, Denish (2024), *Synthetic Mobile Money Transaction Dataset*, Mendeley Data, Version 2.
+
+DOI: [10.17632/zhj366m53p.2](https://doi.org/10.17632/zhj366m53p.2)
+
+License: [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+The repository does not redistribute the source dataset. Its preparation pipeline preserves the
+source version, citation, and file checksums.
+
+## Architecture
+
+Histograph runs as a set of independent control-plane components:
+
+- **FastAPI API** receives model, prediction, outcome, deployment, change, and approval events.
+- **Continuous worker** evaluates monitors, opens incidents, runs investigations, proposes actions,
+  and verifies recovery.
+- **Postgres** stores models, monitors, incidents, approvals, actions, deployment state, and demo
+  runs.
+- **ClickHouse** stores high-volume prediction and outcome observations.
+- **DataHub MCP Server** provides model, feature, dataset, ownership, and lineage context.
+- **GitHub App** imports deployment manifests and opens rollback pull requests.
+- **Reference runtime** serves the reproducible fraud model and emits runtime evidence.
+- **Reconciler** applies merged Git configuration and reports deployment status.
+
+GitHub represents desired deployment state. A merged pull request is not treated as proof of
+recovery: the serving runtime must independently report the new state, followed by fresh healthy
+predictions and outcomes.
+
+## Local setup
+
+### Requirements
+
+- Python 3.13
+- [`uv`](https://docs.astral.sh/uv/)
+- Docker with Compose
+
+Install the project and reference-model dependencies:
+
+```bash
+uv sync --dev --extra demo
+```
+
+Start Postgres, ClickHouse, and Redis without affecting other Docker projects:
 
 ```bash
 ./scripts/compose.sh up -d postgres clickhouse redis
 ```
 
-Install the Python environment, including the reproducible reference-model dependencies, and run
-the checks:
+Run static checks and unit tests:
 
 ```bash
-uv sync --dev --extra demo
 ./scripts/check.sh
 ```
 
-With Postgres and ClickHouse running, execute the database-backed API flow as well:
+Run the database-backed integration suite:
 
 ```bash
 HISTOGRAPH_RUN_INTEGRATION=1 uv run pytest server/tests/integration
 ```
 
-Run the API after the services are healthy:
+Start the API:
 
 ```bash
 uv run uvicorn histograph.api.main:app --app-dir server/src --reload
 ```
 
-Run the continuous control-plane worker in a separate terminal. It uses PostgreSQL leases and
-`FOR UPDATE SKIP LOCKED`, so multiple worker replicas do not evaluate the same due monitor or
-execute the same approved action concurrently:
+Start the continuous worker in another terminal:
 
 ```bash
 PYTHONPATH=server/src uv run python -m histograph.workers
 ```
 
-The API is available at `http://localhost:8000`. Startup applies checksummed Postgres and ClickHouse migrations before accepting traffic.
+The API is available at `http://localhost:8000`. Startup applies checksummed Postgres and
+ClickHouse migrations before accepting traffic.
 
-The headless flow is:
+## DataHub integration
 
-1. Register the model and its binary-class semantics at `/v1/models/{model_name}`.
-2. Send predictions, outcomes, deployment events, or upstream change events to the matching
-   `/v1/events/*` endpoint. Prediction and outcome endpoints support batches of up to 5,000 events.
-3. Create a versioned monitor at `/v1/monitors`. Feature-drift monitors store `feature`; canary
-   monitors store `reference_version`; all monitors store `check_interval_seconds`.
-4. The worker claims due monitors, records every run, opens deduplicated incidents, and performs the
-   DataHub investigation automatically. `/v1/detection/*` remains available for deterministic
-   replay and diagnosis, but it is not required for continuous operation.
-5. A `probable_cause` investigation proposes a deduplicated protective action. It does not wait for
-   `confirmed_cause`, because that status is reserved for recovery verified after the action.
-6. An authorized engineer approves or rejects the proposal. A provider-neutral webhook can execute
-   an approved action directly. For an imported GitOps deployment, Histograph instead opens a
-   rollback pull request and the signed merge becomes the approval.
-7. The worker verifies independent deployment/change state and fresh monitor evidence, reinvestigates
-   to reach `confirmed_cause`, optionally writes the result to DataHub, and only then resolves the
-   incident.
+Histograph connects to self-hosted DataHub OSS through the official DataHub MCP Server. Each
+registered model is associated with a DataHub ML model URN.
 
-The implemented performance evaluator supports binary classification with an explicit positive
-prediction class and actual-outcome value. The implemented drift evaluator supports numeric-feature
-PSI. Monitor creation rejects signal and metric combinations that are not implemented yet, and each
-monitor requires a minimum sample size before it can trigger an incident.
+During an investigation, Histograph:
 
-An investigation reads the model entity and both directions of its DataHub lineage through MCP, records the exact tool trace and lineage evidence on the incident, and keeps the incident open until a dependency change is corroborated. Set `HISTOGRAPH_DATAHUB_MCP_MUTATIONS_ENABLED=true` and pass `write_back: true` only when the team has approved saving the investigation as a DataHub analysis document.
+1. Derives the DataHub URN from the registered model.
+2. Fetches the model entity through MCP.
+3. Traverses upstream and downstream lineage.
+4. Collects connected features, datasets, owners, and consumers.
+5. Correlates lineage with deployment and upstream-change events.
+6. Stores the MCP tool trace and supporting evidence on the incident.
+7. Writes the final investigation and verified recovery evidence back to DataHub.
 
-An incident can enter `resolved` only after persisted recovery evidence contains the action result,
-independent runtime state, and fresh health proof required for that action. Adapter success alone is
-not recovery. A stopped canary requires a later deployment event showing zero candidate traffic and
-a fresh labeled performance window for the stable version; a full model rollback requires the old
-version to stop plus fresh labeled traffic on the declared rollback version; an upstream rollback
-requires a rollback change event and a fresh healthy monitor window. A responsible engineer can
-instead set the incident to `closed`, but manual closure requires a reason and is recorded separately
-in the timeline.
+DataHub narrows the investigation to relevant organizational context. Lineage alone is not treated
+as proof of causality; Histograph still requires correlated release evidence and verified recovery.
 
-## Approval-driven remediation
+### Start DataHub locally
 
-Approver identity comes from a configured bearer token, not from request-body actor fields. For a
-local environment, configure token-to-identity mappings and the organization-owned remediation
-webhook:
+Bootstrap the pinned DataHub Quickstart environment:
 
 ```bash
-export HISTOGRAPH_APPROVAL_TOKENS='{"local-approver-token":"risk-lead@example.com"}'
-export HISTOGRAPH_REMEDIATION_WEBHOOK_URL=https://automation.example.com/histograph/actions
-export HISTOGRAPH_REMEDIATION_WEBHOOK_TOKEN=<outbound-token>
-export HISTOGRAPH_REMEDIATION_CALLBACK_TOKEN=<callback-token>
+./infra/datahub/bootstrap.sh
+set -a
+source infra/datahub/.env
+set +a
 ```
 
-Approve an action with `POST /v1/actions/{action_id}/approval` and a bearer token. The webhook
-receives the immutable action ID as its `Idempotency-Key` and a JSON body containing `action_id`,
-`action_type`, `target`, and `evidence`. It returns:
+Check GMS, the frontend, and the MCP connection:
 
-```json
-{
-  "status": "accepted",
-  "external_execution_id": "provider-run-123",
-  "details": {}
-}
+```bash
+./infra/datahub/health.sh
 ```
 
-`accepted` remains `executing`; it is not success. The provider later calls
-`POST /v1/actions/{action_id}/result` with the callback bearer token and a terminal `succeeded` or
-`failed` result. Providers that finish synchronously can return a terminal status immediately.
-Monitor history is available at `/v1/monitors/{monitor_id}/runs`, and action approval, execution,
-failure, and recovery history is available at `/v1/actions/{action_id}`.
+Configure Histograph:
 
-## GitHub GitOps deployments
+```bash
+export HISTOGRAPH_DATAHUB_GMS_URL=http://localhost:8080
+export HISTOGRAPH_DATAHUB_FRONTEND_URL=http://localhost:9002
+export HISTOGRAPH_DATAHUB_GMS_TOKEN=<token>
+export HISTOGRAPH_DATAHUB_MCP_COMMAND=uvx
+export HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub==0.6.0
+export HISTOGRAPH_DATAHUB_MCP_PYTHON=3.13
+export HISTOGRAPH_DATAHUB_MCP_TIMEOUT_SECONDS=120
+```
 
-GitHub is the desired-state and approval system; it is not treated as proof of runtime state.
-Histograph imports an explicit `ModelDeployment` manifest, registers the manifest's model and
-DataHub URN, and keeps desired Git state separate from deployment/change events observed from the
-serving runtime.
+Stop the local DataHub environment with `./infra/datahub/stop.sh`.
+
+## GitHub GitOps integration
+
+Organizations install the Histograph GitHub App and grant it access only to selected deployment
+repositories. Histograph imports a `ModelDeployment` manifest containing:
+
+- Model identity and DataHub URN
+- Stable and candidate versions
+- Traffic percentages and decision thresholds
+- Artifact locations
+- Input and output schemas
+- Example inputs
+- Feature assets and rollback targets
 
 The reference manifest is
 [`.histograph/deployments/mobile-money-fraud.yaml`](.histograph/deployments/mobile-money-fraud.yaml).
-It declares the stable and candidate artifacts, traffic percentages, decision-threshold
-configuration, DataHub identity, and explicit rollback targets. Histograph refuses to generate a
-rollback when the action target does not match the imported deployment or the manifest does not
-declare the required previous version.
 
-Configure the GitHub App integration:
+Configure the GitHub App:
 
 ```bash
 export HISTOGRAPH_GITHUB_APP_ID=<app-id>
@@ -133,60 +177,24 @@ export HISTOGRAPH_GITHUB_WEBHOOK_SECRET=<webhook-secret>
 export HISTOGRAPH_GITHUB_CONFIGURATION_TOKEN=<configuration-token>
 ```
 
-The App needs access only to selected deployment repositories. The implemented operations require
-repository **Contents: read/write**, **Pull requests: read/write**, and **Deployments: read/write**
-permissions; GitHub supplies Metadata read access. Subscribe its webhook to `push`, `pull_request`,
-and `deployment_status` events at `POST /v1/integrations/github/webhook`. The webhook URL must be a
-public HTTPS URL that forwards to that route; the HMAC secret is verified against the unmodified
-request body.
+Required repository permissions are:
 
-The configuration token protects the headless setup APIs:
+- Contents: read and write
+- Pull requests: read and write
+- Deployments: read and write
+- Metadata: read
+
+Subscribe the App to `push`, `pull_request`, and `deployment_status`. The webhook endpoint is:
 
 ```text
-POST /v1/integrations/github/connections
-POST /v1/integrations/github/connections/{connection_id}/sync
-GET  /v1/integrations/github/connections
-GET  /v1/integrations/github/deployments
+POST /v1/integrations/github/webhook
 ```
 
-When a probable cause targets an imported deployment, the continuous worker opens a normal rollback
-PR on a deterministic `histograph/rollback-<action-id>` branch. The action remains `proposed` while
-the PR is open. A signed merged-PR webhook records the GitHub actor as the approver and moves the
-action to `executing`; closing without merge rejects it. A matching GitHub deployment status marks
-execution succeeded or failed, but recovery still requires a later runtime deployment/change event
-and the existing deterministic verification. The merged `push` re-imports the manifest so desired
-and observed state can return to `in_sync`.
+When an investigation identifies a probable cause, Histograph opens a rollback PR on a
+`histograph/rollback-<action-id>` branch. Merging the PR records the GitHub actor as the approver;
+closing it without merging rejects the proposed action.
 
-### Reference serving and reconciliation
-
-The separate reference runtime makes the demo operational without turning Histograph itself into a
-deployment provider. It loads the trained artifact declared by the manifest, applies the explicit
-feature and threshold configuration, routes stable/candidate traffic with a deterministic hash,
-serves predictions, accepts delayed outcomes, and sends runtime evidence through a durable SQLite
-outbox. Manifest state and its deployment/change evidence commit atomically.
-
-Configure a non-public control token and start it:
-
-```bash
-export HISTOGRAPH_REFERENCE_CONTROL_TOKEN=<random-runtime-control-token>
-PYTHONPATH=server/src uv run --extra demo python -m demo.runtime
-```
-
-The reference reconciler polls the selected repository, creates a GitHub Deployment for a new
-revision, applies that exact revision to the runtime, and reports `in_progress`, `success`, or
-`failure` through GitHub. Its success webhook completes execution in Histograph; the runtime's
-separate deployment events prove what is actually serving.
-
-```bash
-export HISTOGRAPH_REFERENCE_GITHUB_INSTALLATION_ID=<installation-id>
-export HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_OWNER=<owner>
-export HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_NAME=<repository>
-export HISTOGRAPH_REFERENCE_GITHUB_BRANCH=main
-export HISTOGRAPH_REFERENCE_GITHUB_MANIFEST_PATH=.histograph/deployments/mobile-money-fraud.yaml
-PYTHONPATH=server/src uv run --extra demo python -m demo.runtime.reconcile
-```
-
-Create and import the headless connection once the App is installed:
+Create and import a repository connection:
 
 ```bash
 curl -X POST http://localhost:8000/v1/integrations/github/connections \
@@ -201,145 +209,103 @@ curl -X POST http://localhost:8000/v1/integrations/github/connections \
   }'
 ```
 
-Then call `POST /v1/integrations/github/connections/{connection_id}/sync`. Start the API, control
-plane worker, reference runtime, and reference reconciler as four independent processes. No manual
-detection or investigation call is needed; scheduled monitors drive that path.
+Then call `POST /v1/integrations/github/connections/{connection_id}/sync`.
 
-## Repository contract and client API
+## Reference runtime and reconciliation
 
-The canonical demo deployment lives at
-[`.histograph/deployments/mobile-money-fraud.yaml`](.histograph/deployments/mobile-money-fraud.yaml)
-and references repository-relative JSON Schemas and checked-in examples:
+The reference runtime makes the demo reproducible without turning Histograph into a model-hosting
+or deployment provider. It loads the artifact declared by the manifest, applies version-specific
+configuration, routes stable and candidate traffic, accepts delayed outcomes, and emits runtime
+evidence through a durable SQLite outbox.
 
-```text
-.histograph/
-├── deployments/mobile-money-fraud.yaml
-├── schemas/mobile-money-fraud-input.schema.json
-├── schemas/mobile-money-fraud-output.schema.json
-└── examples/mobile-money-fraud.yaml
+Start the runtime:
+
+```bash
+export HISTOGRAPH_REFERENCE_CONTROL_TOKEN=<control-token>
+PYTHONPATH=server/src uv run --extra demo python -m demo.runtime
 ```
 
-GitHub sync resolves all three resources at the same repository revision and stores their validated
-contents with the imported deployment. Paths that escape the repository are rejected. The browser
-never reads GitHub, DataHub, or the model runtime directly.
+Configure and start the reconciler:
 
-The client-ready read and playground surface is:
+```bash
+export HISTOGRAPH_REFERENCE_GITHUB_INSTALLATION_ID=<installation-id>
+export HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_OWNER=<owner>
+export HISTOGRAPH_REFERENCE_GITHUB_REPOSITORY_NAME=<repository>
+export HISTOGRAPH_REFERENCE_GITHUB_BRANCH=main
+export HISTOGRAPH_REFERENCE_GITHUB_MANIFEST_PATH=.histograph/deployments/mobile-money-fraud.yaml
 
-```text
-GET  /v1/overview
-GET  /v1/deployments
-GET  /v1/deployments/{deployment_id}
-POST /v1/deployments/{deployment_id}/predict
-POST /v1/deployments/{deployment_id}/compare
-GET  /v1/monitors
-GET  /v1/activity
-GET  /v1/integrations
+PYTHONPATH=server/src uv run --extra demo python -m demo.runtime.reconcile
 ```
 
-Playground inputs are validated against the imported Draft 2020-12 JSON Schema. Runtime endpoints
-must use HTTP(S), cannot embed credentials, and must match `HISTOGRAPH_PLAYGROUND_ALLOWED_HOSTS`.
-`compare` uses the server-held runtime control token and intentionally emits no prediction telemetry,
-so interactive comparisons cannot pollute production monitors. Prediction and comparison calls use
-a database-backed per-client rate limit that remains consistent across API replicas.
+The reconciler reads an exact Git revision, applies its manifest to the runtime, and reports
+deployment progress through GitHub. Runtime events separately prove what is actually serving.
 
 ## Controlled public demo
 
-`POST /v1/demo/scenarios` creates one durable controlled run for an imported deployment. The normal
-worker emits held-out canary traffic and then tracks the existing monitor, investigation, GitHub PR,
-execution, and recovery records through these stages:
+The hosted product is available at [app.histograph.ai](https://app.histograph.ai).
+
+The reference deployment serves a mobile-money fraud model with v1 receiving 90% of traffic and a
+v2 canary receiving 10%. Both versions use the same trained artifact, while v2 deliberately uses an
+incorrect decision threshold.
+
+Starting the controlled scenario causes the worker to:
+
+1. Replay 1,000 held-out transactions through the real runtime.
+2. Submit a delayed outcome for every prediction.
+3. Evaluate v2 against v1 in the same time window.
+4. Open an incident when v2 recall regresses.
+5. Investigate the model and its lineage through DataHub.
+6. Open a real GitHub rollback PR.
+7. Pause until an engineer merges the PR.
+8. Verify that candidate traffic becomes 0%.
+9. Replay fresh labeled traffic through the recovered runtime.
+10. Resolve the incident only after the stable release passes verification.
+11. Save the final investigation and recovery evidence to DataHub.
+
+The Playground's comparison mode does not record telemetry, so interactive comparisons cannot
+affect production monitors.
+
+## Repository deployment contract
 
 ```text
-queued → emitting_traffic → monitoring → investigating → awaiting_approval
-       → remediating → emitting_recovery_traffic → verifying → resolved
+.histograph/
+├── deployments/
+│   └── mobile-money-fraud.yaml
+├── schemas/
+│   ├── mobile-money-fraud-input.schema.json
+│   └── mobile-money-fraud-output.schema.json
+└── examples/
+    └── mobile-money-fraud.yaml
 ```
 
-Use `GET /v1/demo/scenarios/{run_id}` to poll progress. Only one run can be active, including across
-worker replicas. By default, starting and resetting a run require
-`Authorization: Bearer $HISTOGRAPH_DEMO_CONTROL_TOKEN`. A hosted self-service environment may set
-`HISTOGRAPH_DEMO_PUBLIC_SCENARIOS_ENABLED=true`; the database-level single-run guard still applies.
-Public starts also use a separate hourly per-client rate limit.
+GitHub sync resolves and validates all resources at the same repository revision. Repository paths
+that escape `.histograph` are rejected. The browser never reads GitHub, DataHub, or the model
+runtime directly.
 
-After the reconciler removes candidate traffic, the durable demo worker replays labeled held-out
-rows through the recovered runtime. Recovery remains pending until the stable version has enough
-strictly post-remediation prediction/outcome pairs and its performance passes against the incident's
-original same-window reference value.
+## Remote deployment
 
-After recovery is verified, `POST /v1/demo/scenarios/{run_id}/reset` opens an idempotent GitHub PR
-that restores the exact pre-scenario canary manifest. It never rewrites Git state or serving state
-directly.
-
-## Remote demo packaging
-
-Training now exports a compact 10,000-row held-out `replay.parquet` beside the model artifact. The
-container workflow rebuilds both from the pinned, checksummed dataset and publishes one image to
-GHCR. The same immutable image runs the API, worker, reference runtime, and reconciler with separate
-commands.
-
-[`compose.demo.yaml`](compose.demo.yaml) keeps Postgres, ClickHouse, the runtime control endpoint,
-and the reconciler private. Caddy exposes only the Histograph API over HTTP/HTTPS. For a remote host:
+Training exports the model artifact, its manifest, and a compact held-out replay dataset. The
+container workflow publishes one immutable image that can run the API, worker, reference runtime,
+and reconciler with separate commands.
 
 ```bash
-export HISTOGRAPH_IMAGE=ghcr.io/<owner>/<repository>@sha256:<published-digest>
+export HISTOGRAPH_IMAGE=ghcr.io/<owner>/<repository>@sha256:<digest>
 export HISTOGRAPH_DEMO_SITE_ADDRESS=histograph.ai
 docker compose -f compose.demo.yaml up -d
 ```
 
-Before starting the full GitOps services, configure:
+The demo Compose stack keeps Postgres, ClickHouse, the runtime control endpoint, and the reconciler
+private. Caddy exposes only the Histograph API.
 
-- `HISTOGRAPH_GITHUB_APP_ID`, `HISTOGRAPH_GITHUB_APP_PRIVATE_KEY`, and
-  `HISTOGRAPH_GITHUB_WEBHOOK_SECRET`;
-- the reference installation ID, repository owner, and repository name;
-- independent GitHub configuration, runtime control, and demo control tokens;
-- the reachable DataHub GMS URL/token, browser-facing frontend URL, and whether explicit write-back
-  is enabled.
+## Additional references
 
-No public demo visitor receives or enters those credentials.
+- [Reference environment](demo/README.md)
+- [Model card](demo/MODEL_CARD.md)
+- [Deployment manifest](.histograph/deployments/mobile-money-fraud.yaml)
+- [Example model inputs](.histograph/examples/mobile-money-fraud.yaml)
+- [Environment configuration](.env.example)
+- [Third-party notices](THIRD_PARTY_NOTICES.md)
 
-## Reference fraud environment
+## License
 
-The runnable reference environment is in [`demo/README.md`](demo/README.md). It uses a credited,
-CC BY 4.0 synthetic mobile-money transaction dataset, a chronological split with explicit
-label-delay gaps, two model candidates, a held-out controlled replay, and viability gates that stop
-weak scenarios from being presented.
-
-It demonstrates two distinct release failures:
-
-1. A feature release silently scales `amount` by 100. Histograph measures PSI, reports the largest
-   directional performance loss in percentage points and relative percent, uses DataHub lineage to
-   constrain the suspected change, and confirms causality only after rollback and verified replay
-   recovery.
-2. A 10% model canary ships an incorrect decision threshold. Histograph compares v2 against v1 on
-   the same rows and time window, attributes the regression to the candidate deployment, and keeps
-   the incident unresolved until candidate traffic is removed and recovery is recorded.
-
-The production Histograph control plane observes models; it does not choose customer models or
-become their deployment provider. The repository's separate reference runtime hosts only this
-reproducible demo and proves the connector contract. Histograph coordinates an explicitly approved
-rollback through the organization's configured adapter.
-
-## DataHub
-
-Histograph connects to a self-hosted DataHub GMS endpoint through the official DataHub MCP server. The integration uses the read-only entity and lineage tools during investigations and writes incident evidence only through an explicit write-back path.
-
-Bootstrap the local DataHub environment with the pinned Quickstart wrapper:
-
-```bash
-./infra/datahub/bootstrap.sh
-set -a
-source infra/datahub/.env
-set +a
-```
-
-Run `./infra/datahub/health.sh` to check GMS and the frontend. Stop the local DataHub instance with `./infra/datahub/stop.sh`.
-
-```bash
-export HISTOGRAPH_DATAHUB_GMS_URL=http://localhost:8080
-export HISTOGRAPH_DATAHUB_FRONTEND_URL=http://localhost:9002
-export HISTOGRAPH_DATAHUB_GMS_TOKEN=<token>
-export HISTOGRAPH_DATAHUB_MCP_COMMAND=uvx
-export HISTOGRAPH_DATAHUB_MCP_PACKAGE=mcp-server-datahub==0.6.0
-export HISTOGRAPH_DATAHUB_MCP_PYTHON=3.13
-export HISTOGRAPH_DATAHUB_MCP_TIMEOUT_SECONDS=120
-```
-
-The local DataHub quickstart is separate from the Histograph compose project so its own dependencies and lifecycle remain isolated.
+See [LICENSE](LICENSE).
