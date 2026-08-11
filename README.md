@@ -5,7 +5,7 @@ outcomes, deployment events, and upstream changes; detects deterministic regress
 them through DataHub lineage; coordinates approved remediation; and verifies recovery before
 resolving an incident.
 
-## How it works
+## How It Works
 
 1. Histograph receives predictions, delayed outcomes, and deployment events.
 2. A continuous monitor detects a model regression.
@@ -24,7 +24,7 @@ Histograph keeps detection, investigation, remediation, and recovery separate:
 - `resolved` means Histograph verified recovery using fresh post-remediation evidence.
 - `closed` means an engineer manually closed the incident with a recorded reason.
 
-## Dataset credit
+## Dataset Credit
 
 The reference environment uses:
 
@@ -56,7 +56,7 @@ GitHub represents desired deployment state. A merged pull request is not treated
 recovery: the serving runtime must independently report the new state, followed by fresh healthy
 predictions and outcomes.
 
-## Local setup
+## Local Setup
 
 ### Requirements
 
@@ -103,7 +103,7 @@ PYTHONPATH=server/src uv run python -m histograph.workers
 The API is available at `http://localhost:8000`. Startup applies checksummed Postgres and
 ClickHouse migrations before accepting traffic.
 
-## DataHub integration
+## DataHub Integration
 
 Histograph connects to self-hosted DataHub OSS through the official DataHub MCP Server. Each
 registered model is associated with a DataHub ML model URN.
@@ -121,7 +121,7 @@ During an investigation, Histograph:
 DataHub narrows the investigation to relevant organizational context. Lineage alone is not treated
 as proof of causality; Histograph still requires correlated release evidence and verified recovery.
 
-### Start DataHub locally
+### Start DataHub Locally
 
 Bootstrap the pinned DataHub Quickstart environment:
 
@@ -152,7 +152,7 @@ export HISTOGRAPH_DATAHUB_MCP_TIMEOUT_SECONDS=120
 
 Stop the local DataHub environment with `./infra/datahub/stop.sh`.
 
-## GitHub GitOps integration
+## GitHub GitOps Integration
 
 Organizations install the Histograph GitHub App and grant it access only to selected deployment
 repositories. Histograph imports a `ModelDeployment` manifest containing:
@@ -211,7 +211,7 @@ curl -X POST http://localhost:8000/v1/integrations/github/connections \
 
 Then call `POST /v1/integrations/github/connections/{connection_id}/sync`.
 
-## Reference runtime and reconciliation
+## Reference Runtime and Reconciliation
 
 The reference runtime makes the demo reproducible without turning Histograph into a model-hosting
 or deployment provider. It loads the artifact declared by the manifest, applies version-specific
@@ -240,7 +240,7 @@ PYTHONPATH=server/src uv run --extra demo python -m demo.runtime.reconcile
 The reconciler reads an exact Git revision, applies its manifest to the runtime, and reports
 deployment progress through GitHub. Runtime events separately prove what is actually serving.
 
-## Controlled public demo
+## Controlled Public Demo
 
 The hosted product is available at [app.histograph.ai](https://app.histograph.ai).
 
@@ -265,7 +265,7 @@ Starting the controlled scenario causes the worker to:
 The Playground's comparison mode does not record telemetry, so interactive comparisons cannot
 affect production monitors.
 
-## Repository deployment contract
+## Repository Deployment Contract
 
 ```text
 .histograph/
@@ -282,7 +282,7 @@ GitHub sync resolves and validates all resources at the same repository revision
 that escape `.histograph` are rejected. The browser never reads GitHub, DataHub, or the model
 runtime directly.
 
-## Remote deployment
+## Remote Deployment
 
 Training exports the model artifact, its manifest, and a compact held-out replay dataset. The
 container workflow publishes one immutable image that can run the API, worker, reference runtime,
@@ -297,7 +297,7 @@ docker compose -f compose.demo.yaml up -d
 The demo Compose stack keeps Postgres, ClickHouse, the runtime control endpoint, and the reconciler
 private. Caddy exposes only the Histograph API.
 
-## Additional references
+## Additional References
 
 - [Reference environment](demo/README.md)
 - [Model card](demo/MODEL_CARD.md)
