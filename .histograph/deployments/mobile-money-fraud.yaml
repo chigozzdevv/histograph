@@ -25,13 +25,13 @@ spec:
     artifact: demo/artifacts/mobile_money_fraud.joblib
     configuration:
       decisionThreshold: 0.8247828532693404
-    trafficPercentage: 90
+    trafficPercentage: 100.0
   candidate:
     version: v2
     artifact: demo/artifacts/mobile_money_fraud.joblib
     configuration:
-      decisionThreshold: 0.99
-    trafficPercentage: 10
+      decisionThreshold: 0.999
+    trafficPercentage: 0.0
   features:
   - name: mobile-money-amount-feature
     assetUrn: urn:li:mlFeature:(mobile_money_transaction_features,amount)
